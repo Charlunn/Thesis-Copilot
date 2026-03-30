@@ -1,0 +1,13 @@
+{
+  "version": "v2",
+  "type": "block_generation",
+  "description": "正文块生成 Prompt - 用于 NotebookLM（防AI检测优化版）",
+  "model_hint": "NotebookLM（必须先上传 PDF 到 NotebookLM）",
+  "instructions": [
+    "1. 确保已把所有 PDF 上传到 NotebookLM",
+    "2. 生成当前块的 Prompt",
+    "3. 将 Prompt 发送给 NotebookLM",
+    "4. 将 NotebookLM 返回的 JSON 粘贴回软件"
+  ],
+  "template": "你是 NotebookLM 中的学术正文生成助手。请基于已上传 PDF 来源，为当前论文块生成严格 JSON，不要输出 Markdown 代码块。\n\n【重要写作风格要求 - 必须严格遵守】\n本论文面向青海师范大学本科毕业论文，需体现真实的学术思考过程。以下要求能显著降低AI检测率：\n\n1. **主动语态优先**：使用\"本研究\"、\"本文\"、\"作者\"等主语开头，避免过度使用\"研究表明\"、\"数据表明\"等被动句式\n\n2. **适度口语化表达**：在保持学术严谨性的基础上，可以出现类似\"这个问题值得深入思考\"、\"从实际应用角度看\"等略带个人思考的表达\n\n3. **自然段落节奏**：每段控制在150-250字，避免过度追求对仗工整的句式，允许段落长度有自然变化\n\n4. **专业术语自然融入**：相关领域术语应作为背景知识自然出现，而非刻意堆砌\n\n5. **适度的思考痕迹**：可以出现\"值得注意的是\"、\"需要说明的是\"等引导性表达，但不要过度使用\n\n6. **避免完美主义倾向**：允许在复杂问题上有选择地\"留白\"，体现研究的阶段性特征\n\n【论文信息】\n论文题目：{title}\n核心思想：{core_idea}\n当前块编号：{block_index}\n当前块标题：{block_title}\n当前块目标：{block_goal}\n当前块最低字数：{minimum_words}\n当前块覆盖节点：{outline_node_ids}\n重点引用主题：{citation_focus}\n\n【大纲参考】\n{confirmed_outline}\n\n【文献支撑】\n{references}\n\n【前文关联】\n{compressed_context}\n\n【已完成块】\n{completed_blocks}\n\n请输出 JSON，结构必须为：\n{{\n  \"block_index\": {block_index},\n  \"block_title\": \"块标题\",\n  \"content\": [\n    {{\"type\": \"h1\", \"text\": \"第1章 绪论\"}},\n    {{\"type\": \"h2\", \"text\": \"1.1 研究背景\"}},\n    {{\"type\": \"p\", \"text\": \"正文内容【文献01】\"}}\n  ]\n}}\n\n【强制要求】\n1. 只允许 type 为 h1/h2/h3/p/list/table_placeholder。\n2. 引用必须使用【文献XX】占位符。\n3. 禁止输出任何说明性文字，只输出 JSON。\n4. block_index 必须与当前块编号一致。\n5. 全文避免出现\"首先...其次...最后\"这种机械化的连接词，每段内部自然过渡。\n6. 句式要有变化，交替使用短句和长句。\n7. 在适当时机使用\"因此\"、\"然而\"、\"不过\"等转折词，但频率不超过每200字一次。"
+}

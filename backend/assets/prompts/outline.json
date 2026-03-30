@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "type": "outline",
+  "description": "大纲生成 Prompt - 用于 NotebookLM",
+  "model_hint": "NotebookLM（必须先上传 PDF 到 NotebookLM）",
+  "instructions": [
+    "1. 先将 processed_pdfs 文件夹中的 PDF 全部上传到 NotebookLM",
+    "2. 生成大纲 Prompt",
+    "3. 将 Prompt 发送给 NotebookLM",
+    "4. 将 NotebookLM 返回的 JSON 粘贴回软件"
+  ],
+  "template": "你是 NotebookLM 中的论文提纲生成助手。请基于用户已经上传到 NotebookLM 的 PDF，为当前论文生成严格 JSON，不要输出 Markdown 代码块。\n\n论文题目：{title}\n核心思想：{core_idea}\n最低总字数：{minimum_total_words}\n已整理参考文献：{references}\n\n要求：\n1. 提纲必须适合本科毕业论文写作。\n2. 根节点至少 3 个一级章节，且一级章节 level 必须为 1。\n3. 子节点 level 必须等于父节点 level + 1。\n4. id 使用层级编号样式，例如 1、1.1、1.1.1。\n5. 只输出 JSON，不要附加说明。\n\n输出 JSON 结构必须为：\n{{\n  \"title\": \"论文标题\",\n  \"outline\": [\n    {{\n      \"id\": \"1\",\n      \"level\": 1,\n      \"title\": \"绪论\",\n      \"children\": [\n        {{\n          \"id\": \"1.1\",\n          \"level\": 2,\n          \"title\": \"研究背景\",\n          \"children\": []\n        }}\n      ]\n    }}\n  ]\n}}\n"
+}

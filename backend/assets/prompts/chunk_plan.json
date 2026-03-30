@@ -1,0 +1,12 @@
+{
+  "version": "v1",
+  "type": "chunk_plan",
+  "description": "切块规划 Prompt - 用于通用 LLM",
+  "model_hint": "通用 LLM（如 ChatGPT、Claude 等）",
+  "instructions": [
+    "请生成切块规划 Prompt",
+    "将 Prompt 发送给通用 LLM",
+    "将 LLM 返回的 JSON 粘贴回软件"
+  ],
+  "template": "你是论文切块规划助手。请根据以下项目信息，输出严格 JSON，不要输出 Markdown 代码块。\n\n论文题目：{title}\n核心思想：{core_idea}\n最低总字数：{minimum_total_words}\n\n最终确认版大纲：\n{confirmed_outline}\n\n请输出 JSON，结构必须为：\n{{\n  \"total_blocks\": 8,\n  \"blocks\": [\n    {{\n      \"block_index\": 1,\n      \"title\": \"块标题\",\n      \"outline_node_ids\": [\"1\", \"1.1\"],\n      \"goal\": \"本块写作目标\",\n      \"minimum_words\": 1200,\n      \"citation_focus\": [\"主题A\", \"主题B\"]\n    }}\n  ]\n}}\n\n要求：\n1. 覆盖所有 enabled=true 的大纲节点。\n2. block_index 从 1 连续递增。\n3. minimum_words 总和不少于最低总字数。\n4. 不要省略字段，不要解释。"
+}

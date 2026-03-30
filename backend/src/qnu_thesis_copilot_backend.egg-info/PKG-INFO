@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: qnu-thesis-copilot-backend
+Version: 0.1.0
+Summary: Local backend kernel for QNU Thesis Copilot milestone 1
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1.0,>=0.115
+Requires-Dist: pydantic<3.0,>=2.12
+Requires-Dist: python-docx<2.0,>=1.1
+Requires-Dist: uvicorn<1.0,>=0.34
+Provides-Extra: dev
+Requires-Dist: httpx<1.0,>=0.28; extra == "dev"
+Requires-Dist: pytest<9.0,>=8.4; extra == "dev"

@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "type": "compression",
+  "description": "上下文压缩 Prompt - 用于通用 LLM",
+  "model_hint": "通用 LLM（如 ChatGPT、Claude 等）",
+  "instructions": [
+    "请生成当前块的压缩 Prompt",
+    "将 Prompt 发送给通用 LLM",
+    "将 LLM 返回的 JSON 粘贴回软件",
+    "最后一块无需压缩，可直接跳过"
+  ],
+  "template": "你是论文上下文压缩助手。请把当前已生成的论文块压缩为严格 JSON，不要输出 Markdown 代码块。\n\n已完成块截止：第 {current_block} 块\n已完成块内容：\n{imported_blocks}\n\n后续待写块规划：\n{remaining_blocks}\n\n请输出 JSON，结构必须为：\n{{\n  \"covered_blocks\": [1, 2],\n  \"compressed_context\": {{\n    \"narrative_summary\": \"前文总结\",\n    \"key_claims\": [\"论点A\"],\n    \"used_citations\": [\"文献01\"],\n    \"pending_topics\": [\"实验设计\"],\n    \"style_constraints\": [\"保持学术口吻\"]\n  }}\n}}\n\n要求：\n1. covered_blocks 必须覆盖当前所有已完成块。\n2. narrative_summary 必须非空。\n3. 结果要足够供下一块生成继续沿用风格与逻辑。"
+}

@@ -1,0 +1,12 @@
+{
+  "version": "v1",
+  "type": "reference_recommendation",
+  "description": "文献推荐 Prompt - 用于通用 LLM",
+  "model_hint": "通用 LLM（如 ChatGPT、Claude 等）",
+  "instructions": [
+    "请生成推荐文献 Prompt",
+    "将 Prompt 发送给通用 LLM",
+    "将 LLM 返回的 JSON 粘贴回软件"
+  ],
+  "template": "你是论文参考文献检索助手。请根据以下项目信息，输出严格 JSON，不要输出 Markdown 代码块。\n\n论文题目：{title}\n核心思想：{core_idea}\n学科方向：{discipline}\n关键词：{keywords}\n最低参考文献数量：{minimum_required}\n\n请推荐与该选题高度相关的参考文献，结果必须满足：\n1. 中文论文至少 15 篇，英文论文至少 15 篇。\n2. 每篇都必须给出 title、language、download_url、bibtex。\n3. language 只能使用 zh 或 en。\n4. download_url 尽量提供可以实际访问的 PDF 或论文落地页链接。\n5. 不要解释，不要附加说明，只返回 JSON。\n\n输出 JSON 结构必须为：\n{{\n  \"topic\": \"论文主题\",\n  \"papers\": [\n    {{\n      \"title\": \"论文标题\",\n      \"language\": \"zh\",\n      \"year\": 2024,\n      \"venue\": \"期刊或会议\",\n      \"download_url\": \"https://...\",\n      \"impact_note\": \"推荐理由\",\n      \"bibtex\": \"@article{...}\"\n    }}\n  ]\n}}\n"
+}
