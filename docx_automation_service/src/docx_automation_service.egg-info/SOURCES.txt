@@ -11,12 +11,16 @@ src/docx_automation_service/api/__init__.py
 src/docx_automation_service/api/routes.py
 src/docx_automation_service/core/__init__.py
 src/docx_automation_service/core/config.py
+src/docx_automation_service/core/logging.py
 src/docx_automation_service/core/models.py
 src/docx_automation_service/integrations/__init__.py
+src/docx_automation_service/integrations/back_translation.py
 src/docx_automation_service/integrations/base.py
 src/docx_automation_service/integrations/mock_detectors.py
 src/docx_automation_service/integrations/siliconflow_rewriter.py
+src/docx_automation_service/integrations/text_analyzer.py
 src/docx_automation_service/services/__init__.py
 src/docx_automation_service/services/docx_mapper.py
 src/docx_automation_service/services/pipeline.py
 tests/test_health.py
+tests/test_three_layer_pipeline.py

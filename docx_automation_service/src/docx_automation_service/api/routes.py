@@ -34,8 +34,8 @@ async def create_run(
     topic_hint: str | None = Form(default=None),
     preserve_terms: str | None = Form(default=None),
 ):
-    if mode not in {"analyze", "rewrite"}:
-        raise HTTPException(status_code=400, detail="mode must be analyze or rewrite")
+    if mode not in {"analyze", "rewrite", "deep_rewrite"}:
+        raise HTTPException(status_code=400, detail="mode must be analyze, rewrite, or deep_rewrite")
 
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="only .docx is supported")
@@ -65,7 +65,7 @@ async def create_run(
         "status": record.status,
         "mode": record.mode,
         "report_url": f"/v1/runs/{record.run_id}/report",
-        "result_url": f"/v1/runs/{record.run_id}/result" if mode == "rewrite" else None,
+        "result_url": f"/v1/runs/{record.run_id}/result" if mode in {"rewrite", "deep_rewrite"} else None,
     }
     return payload
 
@@ -90,8 +90,8 @@ async def get_result(run_id: str):
     if not record:
         raise HTTPException(status_code=404, detail="run not found")
 
-    if record.mode != "rewrite":
-        raise HTTPException(status_code=400, detail="result only exists for rewrite mode")
+    if record.mode not in {"rewrite", "deep_rewrite"}:
+        raise HTTPException(status_code=400, detail="result only exists for rewrite and deep_rewrite modes")
 
     if not record.result_path or not Path(record.result_path).exists():
         raise HTTPException(status_code=404, detail="result not ready")
