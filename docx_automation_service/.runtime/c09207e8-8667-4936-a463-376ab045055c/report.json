@@ -1,0 +1,812 @@
+{
+  "run_id": "c09207e8-8667-4936-a463-376ab045055c",
+  "mode": "rewrite",
+  "thresholds": {
+    "similarity_threshold": 0.1,
+    "aigc_threshold": 0.2
+  },
+  "chunk_total": 133,
+  "flagged_total": 34,
+  "rewrite_failed_total": 0,
+  "rewrite_failures": [],
+  "chunks": [
+    {
+      "chunk_id": "p-0",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-1",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-2",
+      "similarity_score": 0.0,
+      "aigc_score": 0.04814814814814815,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-3",
+      "similarity_score": 0.0,
+      "aigc_score": 0.2695092592592592,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-4",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-5",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-6",
+      "similarity_score": 0.0,
+      "aigc_score": 0.04814814814814815,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-7",
+      "similarity_score": 0.0,
+      "aigc_score": 0.2692760416666667,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-8",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-9",
+      "similarity_score": 0.0,
+      "aigc_score": 0.4034814814814815,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-10",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-11",
+      "similarity_score": 0.0,
+      "aigc_score": 0.18392592592592602,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-12",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-13",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0953333333333333,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-14",
+      "similarity_score": 0.0,
+      "aigc_score": 0.40025850340136054,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-15",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-16",
+      "similarity_score": 0.0,
+      "aigc_score": 0.5113333333333333,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-17",
+      "similarity_score": 0.0,
+      "aigc_score": 0.19043877551020416,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-18",
+      "similarity_score": 0.0,
+      "aigc_score": 0.5113333333333333,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-19",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-20",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-21",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-22",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-23",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-24",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-25",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-26",
+      "similarity_score": 0.0,
+      "aigc_score": 0.010020833333333312,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-27",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-28",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-29",
+      "similarity_score": 0.0,
+      "aigc_score": 0.1405925925925926,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-30",
+      "similarity_score": 0.0,
+      "aigc_score": 0.17368707482993198,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-31",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0953333333333333,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-32",
+      "similarity_score": 0.0,
+      "aigc_score": 0.1455646258503401,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-33",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-34",
+      "similarity_score": 0.0,
+      "aigc_score": 0.18392592592592602,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-35",
+      "similarity_score": 0.0,
+      "aigc_score": 0.2941360544217687,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-36",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-37",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-38",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-39",
+      "similarity_score": 0.0,
+      "aigc_score": 0.1405925925925926,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-40",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-41",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-42",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3067037037037037,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-43",
+      "similarity_score": 0.0,
+      "aigc_score": 0.04814814814814815,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-44",
+      "similarity_score": 0.0,
+      "aigc_score": 0.4606875,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-45",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-46",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0953333333333333,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-47",
+      "similarity_score": 0.0,
+      "aigc_score": 0.46258333333333335,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-48",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-49",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-50",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0953333333333333,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-51",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-52",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-53",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-54",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-55",
+      "similarity_score": 0.0,
+      "aigc_score": 0.15016326530612245,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-56",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-57",
+      "similarity_score": 0.0,
+      "aigc_score": 0.19873148148148143,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-58",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-59",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-60",
+      "similarity_score": 0.0,
+      "aigc_score": 0.10157333333333327,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-61",
+      "similarity_score": 0.0,
+      "aigc_score": 0.1405925925925926,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-62",
+      "similarity_score": 0.0,
+      "aigc_score": 0.29362666666666665,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-63",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-64",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3875925925925926,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-65",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-66",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-67",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-68",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-69",
+      "similarity_score": 0.0,
+      "aigc_score": 0.004694444444444457,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-70",
+      "similarity_score": 0.0,
+      "aigc_score": 0.1405925925925926,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-71",
+      "similarity_score": 0.0,
+      "aigc_score": 0.1052380952380953,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-72",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-73",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-74",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3717037037037037,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-75",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-76",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3717037037037037,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-77",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-78",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-79",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3717037037037037,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-80",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-81",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-82",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-83",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-84",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-85",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-86",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-87",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-88",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-89",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-90",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-91",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-92",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-93",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-94",
+      "similarity_score": 0.0,
+      "aigc_score": 0.35429333333333335,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-95",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-96",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-98",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-99",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-100",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-101",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-102",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-103",
+      "similarity_score": 0.0,
+      "aigc_score": 0.2763703703703703,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-104",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-105",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3293333333333333,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-106",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-107",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-108",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-109",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-110",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-111",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-112",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-113",
+      "similarity_score": 0.0,
+      "aigc_score": 0.3139259259259259,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-114",
+      "similarity_score": 0.0,
+      "aigc_score": 0.08377777777777781,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-115",
+      "similarity_score": 0.0,
+      "aigc_score": 0.045259259259259166,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-116",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-117",
+      "similarity_score": 0.0,
+      "aigc_score": 0.0,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-118",
+      "similarity_score": 0.0,
+      "aigc_score": 0.4651111111111111,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-119",
+      "similarity_score": 0.0,
+      "aigc_score": 0.5604444444444444,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-120",
+      "similarity_score": 0.0,
+      "aigc_score": 0.6085925925925926,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-121",
+      "similarity_score": 0.0,
+      "aigc_score": 0.599925925925926,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-122",
+      "similarity_score": 0.0,
+      "aigc_score": 0.312,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-123",
+      "similarity_score": 0.0,
+      "aigc_score": 0.546,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-124",
+      "similarity_score": 0.0,
+      "aigc_score": 0.43525925925925923,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-125",
+      "similarity_score": 0.0,
+      "aigc_score": 0.389037037037037,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-126",
+      "similarity_score": 0.0,
+      "aigc_score": 0.5074814814814815,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-127",
+      "similarity_score": 0.0,
+      "aigc_score": 0.5431111111111112,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-128",
+      "similarity_score": 0.0,
+      "aigc_score": 0.43044444444444446,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-129",
+      "similarity_score": 0.0,
+      "aigc_score": 0.6374814814814814,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-130",
+      "similarity_score": 0.0,
+      "aigc_score": 0.15792592592592591,
+      "flagged": false
+    },
+    {
+      "chunk_id": "p-131",
+      "similarity_score": 0.0,
+      "aigc_score": 0.5604444444444444,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-132",
+      "similarity_score": 0.0,
+      "aigc_score": 0.4073333333333334,
+      "flagged": true
+    },
+    {
+      "chunk_id": "p-133",
+      "similarity_score": 0.0,
+      "aigc_score": 0.6143703703703703,
+      "flagged": true
+    }
+  ]
+}

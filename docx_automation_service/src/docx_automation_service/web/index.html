@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DOCX Automation Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <main class="shell">
+      <header class="hero">
+        <p class="kicker">FORMAT-PRESERVING PIPELINE</p>
+        <h1>DOCX Automation Console</h1>
+        <p class="sub">
+          可独立使用，也可嵌入主系统。上传 DOCX 后，执行检测或改写，并下载结果文档。
+        </p>
+      </header>
+
+      <section class="panel form-panel">
+        <h2>1. 处理任务</h2>
+        <form id="run-form">
+          <label>
+            选择 DOCX 文件
+            <input id="file" name="file" type="file" accept=".docx" required />
+          </label>
+
+          <div class="grid-2">
+            <label>
+              模式
+              <select id="mode" name="mode">
+                <option value="rewrite" selected>rewrite（检测+改写）</option>
+                <option value="analyze">analyze（仅检测）</option>
+              </select>
+            </label>
+
+            <label>
+              主题提示（可选）
+              <input id="topic_hint" name="topic_hint" type="text" placeholder="如：机器学习论文" />
+            </label>
+          </div>
+
+          <label>
+            术语白名单（可选，逗号分隔）
+            <input
+              id="preserve_terms"
+              name="preserve_terms"
+              type="text"
+              placeholder="Transformer, AUC, 精确率"
+            />
+          </label>
+
+          <button id="submit-btn" type="submit">提交任务</button>
+        </form>
+      </section>
+
+      <section class="panel result-panel">
+        <h2>2. 结果</h2>
+        <div id="status" class="status">等待提交任务</div>
+        <pre id="output" class="output"></pre>
+        <div class="actions">
+          <button id="report-btn" disabled>查看报告</button>
+          <button id="download-btn" disabled>下载结果 DOCX</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

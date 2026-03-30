@@ -1,0 +1,110 @@
+Metadata-Version: 2.4
+Name: docx-automation-service
+Version: 0.1.0
+Summary: DOCX format-preserving compliance automation service
+Author: Thesis Project Team
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: python-docx>=1.1.2
+Requires-Dist: pydantic>=2.8.0
+Requires-Dist: pydantic-settings>=2.4.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: httpx>=0.27.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.8; extra == "dev"
+
+# DOCX Automation Service
+
+面向论文场景的格式无损自动化服务，基于你文档中的四阶段策略实现：
+1. 高保真摄入与语义分块
+2. 双流检测（重复风险 + AIGC 风险）
+3. 严格约束改写（保留引用与术语）
+4. 格式感知回注（Run 级替换，尽量不破坏样式）
+
+## 1. 安装
+
+```bash
+cd docx_automation_service
+python -m pip install -e ".[dev]"
+```
+
+## 2. 配置
+
+复制 `.env.example` 为 `.env`，填入你的硅基流动 API Key：
+
+- `DOCX_AUTOMATION_SILICONFLOW_API_KEY`
+
+## 3. 启动
+
+```bash
+uvicorn docx_automation_service.main:app --reload --port 8096
+```
+
+## 3.1 简易前端（可单用）
+
+启动后直接访问：
+
+- `http://127.0.0.1:8096/app`
+
+该页面可完成：上传 DOCX、选择 analyze/rewrite、查看报告、下载改写结果。
+
+## 3.2 主系统接入方式
+
+你可以二选一：
+
+- API 接入：主系统直接调用 `/v1/runs`、`/v1/runs/{run_id}/report`、`/v1/runs/{run_id}/result`
+- 页面嵌入：主系统通过 iframe 嵌入 `http://127.0.0.1:8096/app`
+
+如需跨域调用，请在 `.env` 设置：
+
+- `DOCX_AUTOMATION_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173`
+
+## 4. 外部接口（供论文生成应用调用）
+
+### 创建处理任务
+
+`POST /v1/runs`
+
+- Content-Type: `multipart/form-data`
+- 字段:
+  - `file`: DOCX 文件
+  - `mode`: `analyze` 或 `rewrite`
+  - `topic_hint` (optional): 主题提示
+  - `preserve_terms` (optional): 逗号分隔术语白名单
+
+返回：
+- `run_id`
+- `status`
+- `report_url`
+- `result_url`（仅 rewrite 可下载）
+
+### 查询报告
+
+`GET /v1/runs/{run_id}/report`
+
+返回每个分块的检测分数、是否命中阈值、是否改写。
+
+### 下载结果文件
+
+`GET /v1/runs/{run_id}/result`
+
+下载改写后的 DOCX 文件。
+
+### 健康检查
+
+`GET /health`
+
+## 5. 对接建议
+
+论文生成应用可在终稿导出后调用本服务：
+1. 上传 DOCX 至 `POST /v1/runs`，`mode=rewrite`
+2. 轮询 `GET /v1/runs/{run_id}/report`
+3. 完成后拉取 `GET /v1/runs/{run_id}/result`
+
+## 6. 说明
+
+- 当前重复检测/AI 风险检测默认使用本地启发式实现，可替换为 Turnitin/Copyleaks/GPTZero 等适配器。
+- 回注策略优先保证版式稳定，复杂跨 Run 场景下采用“首 Run 注入 + 后续 Run 清空”的方式。
