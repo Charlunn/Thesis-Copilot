@@ -6,6 +6,9 @@ const topicInput = document.getElementById("topic_hint");
 const termsInput = document.getElementById("preserve_terms");
 const modelInput = document.getElementById("model_name");
 const reasoningInput = document.getElementById("enable_reasoning");
+const aigcStrategyInput = document.getElementById("aigc_reduction_strategy");
+const enableLayer2Input = document.getElementById("enable_structural_rebuild");
+const layer2ToggleWrap = document.getElementById("layer2-toggle-wrap");
 const submitBtn = document.getElementById("submit-btn");
 const statusEl = document.getElementById("status");
 const outputEl = document.getElementById("output");
@@ -183,6 +186,11 @@ form.addEventListener("submit", async (e) => {
       fd.append("model_name", modelInput.value.trim());
     }
     fd.append("enable_reasoning", reasoningInput.checked ? "true" : "false");
+    const strategy = aigcStrategyInput ? aigcStrategyInput.value : "";
+    if (strategy) {
+      fd.append("aigc_reduction_strategy", strategy);
+    }
+    fd.append("enable_structural_rebuild", (enableLayer2Input && enableLayer2Input.checked) ? "true" : "false");
 
     const created = await fetchJson("/v1/runs", { method: "POST", body: fd });
     runInfo = created;
@@ -250,3 +258,13 @@ async function restoreLastRun() {
 }
 
 restoreLastRun();
+
+// Show/hide the layer2 toggle based on strategy selection
+if (aigcStrategyInput && layer2ToggleWrap) {
+  function updateLayer2Visibility() {
+    const show = aigcStrategyInput.value === "strategy_2";
+    layer2ToggleWrap.style.display = show ? "" : "none";
+  }
+  aigcStrategyInput.addEventListener("change", updateLayer2Visibility);
+  updateLayer2Visibility();
+}

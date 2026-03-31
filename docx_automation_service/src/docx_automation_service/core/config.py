@@ -60,6 +60,20 @@ class Settings(BaseSettings):
     rewrite_retry_on_low_change: bool = True
     rewrite_min_change_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
 
+    # --- AIGC reduction strategies ----------------------------------------
+    # "strategy_1": single comprehensive pass (high-risk / high-reward)
+    # "strategy_2": layered – vocab cooldown (L1) + optional structural rebuild (L2)
+    aigc_reduction_strategy: str = "strategy_2"
+    # When True and strategy_2 is active, the structural-rebuild layer is applied.
+    aigc_reduction_enable_layer2: bool = False
+
+    # --- Global context compression ---------------------------------------
+    # When True, a single LLM call compresses the document skeleton before
+    # chunk-level rewriting so each chunk is aware of the thesis context.
+    global_context_enabled: bool = True
+    # Number of leading non-heading chunks sampled for context extraction.
+    global_context_sample_chunks: int = Field(default=5, ge=1)
+
     cors_origins: str = "*"
     log_level: str = "INFO"
     log_exception_stack: bool = False

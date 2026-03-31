@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import logging
 import re
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _MARKDOWN_FENCE_RE = re.compile(r"```(?:[\w-]+)?\n.*?```", re.DOTALL)
 _HEADING_RE = re.compile(r"^(?:第[0-9一二三四五六七八九十百千]+章\s*.+|\d+(?:\.\d+){1,4}\s+.+)$")
 _STRATEGY_LINE_RE = re.compile(r"^第[0-9一二三四五六七八九十]+个策略")
+
+# ---------------------------------------------------------------------------
+# Entity hallucination detection patterns
+# ---------------------------------------------------------------------------
+_PERCENTAGE_RE = re.compile(r"\d+(?:\.\d+)?%")
+_CITATION_BRACKET_RE = re.compile(r"\[\d+\]")
+_CITATION_AUTHOR_RE = re.compile(r"\([A-Za-z][A-Za-z\s,\.]+,?\s*\d{4}\)")
+_DECIMAL_NUMBER_RE = re.compile(r"\b\d+\.\d+\b")
+
+logger = logging.getLogger(__name__)
+
 _REASONING_MARKERS = (
     "我现在需要",
     "我得",
@@ -26,8 +38,41 @@ _REASONING_MARKERS = (
 )
 
 
+def check_entity_hallucination(generated_text: str, source_text: str) -> bool:
+    """Return True if *generated_text* introduces numeric/citation entities absent from *source_text*.
+
+    Extracts percentages, bracket citations, author-year citations, and decimal
+    numbers from the generated text.  If any such entity is present in the
+    generated text but **completely absent** from the source text it is
+    considered a hallucination and this function returns ``True``.
+    """
+    for pattern in (
+        _PERCENTAGE_RE,
+        _CITATION_BRACKET_RE,
+        _CITATION_AUTHOR_RE,
+        _DECIMAL_NUMBER_RE,
+    ):
+        gen_matches = set(pattern.findall(generated_text))
+        if not gen_matches:
+            continue
+        src_matches = set(pattern.findall(source_text))
+        hallucinated = gen_matches - src_matches
+        if hallucinated:
+            logger.warning(
+                "entity hallucination detected | pattern=%s | new_entities=%s",
+                pattern.pattern,
+                hallucinated,
+            )
+            return True
+    return False
+
+
 def sanitize_model_output(text: str, *, original_text: str, source_is_heading: bool) -> str:
     """Remove leaked reasoning/meta text and heading-like pollution.
+
+    Also performs entity hallucination detection: if the generated text
+    introduces numeric data, percentages, or citation markers that are absent
+    from the original source, the original text is returned as a fallback.
 
     Returns the original text if sanitization strips everything useful.
     """
@@ -57,6 +102,10 @@ def sanitize_model_output(text: str, *, original_text: str, source_is_heading: b
 
     cleaned = "\n".join(lines).strip()
     if not cleaned:
+        return original_text
+
+    if check_entity_hallucination(cleaned, original_text):
+        logger.warning("entity hallucination guard triggered; falling back to original text")
         return original_text
 
     return cleaned

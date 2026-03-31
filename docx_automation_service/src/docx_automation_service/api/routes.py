@@ -37,6 +37,8 @@ async def create_run(
     preserve_terms: str | None = Form(default=None),
     model_name: str | None = Form(default=None),
     enable_reasoning: bool = Form(default=False),
+    aigc_reduction_strategy: str | None = Form(default=None),
+    enable_structural_rebuild: bool = Form(default=False),
 ):
     if mode not in {"analyze", "rewrite", "deep_rewrite"}:
         raise HTTPException(status_code=400, detail="mode must be analyze, rewrite, or deep_rewrite")
@@ -73,6 +75,11 @@ async def create_run(
     terms = [x.strip() for x in (preserve_terms or "").split(",") if x.strip()]
     record = pipeline.create_run_record(mode)
     pipeline.update_run_options(record.run_id, model_name=model_name, enable_reasoning=enable_reasoning)
+    pipeline.update_run_aigc_options(
+        record.run_id,
+        aigc_reduction_strategy=aigc_reduction_strategy,
+        enable_structural_rebuild=enable_structural_rebuild,
+    )
     pipeline.start_run_in_background(
         run_id=record.run_id,
         file_path=target,
@@ -81,6 +88,8 @@ async def create_run(
         preserve_terms=terms,
         model_name=model_name,
         enable_reasoning=enable_reasoning,
+        aigc_reduction_strategy=aigc_reduction_strategy,
+        enable_structural_rebuild=enable_structural_rebuild,
     )
 
     logger.info(
@@ -96,6 +105,8 @@ async def create_run(
         "mode": record.mode,
         "llm_model": (model_name or "").strip() or None,
         "reasoning_enabled": enable_reasoning,
+        "aigc_reduction_strategy": aigc_reduction_strategy,
+        "enable_structural_rebuild": enable_structural_rebuild,
         "progress_percent": record.progress_percent,
         "current_stage": record.current_stage,
         "status_url": f"/v1/runs/{record.run_id}/status",

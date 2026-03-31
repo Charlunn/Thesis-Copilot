@@ -64,6 +64,9 @@ class RunRecord(BaseModel):
     eta_seconds: int | None = None
     llm_model: str | None = None
     reasoning_enabled: bool = False
+    # AIGC reduction options
+    aigc_reduction_strategy: str | None = None
+    enable_structural_rebuild: bool = False
     message: str | None = None
     error: str | None = None
     # Per-layer processing summaries (populated for deep_rewrite mode)
