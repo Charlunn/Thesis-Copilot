@@ -22,5 +22,9 @@ src/docx_automation_service/integrations/text_analyzer.py
 src/docx_automation_service/services/__init__.py
 src/docx_automation_service/services/docx_mapper.py
 src/docx_automation_service/services/pipeline.py
+src/docx_automation_service/services/text_guard.py
+tests/test_async_runs.py
+tests/test_docx_mapper_citations.py
 tests/test_health.py
+tests/test_text_guard.py
 tests/test_three_layer_pipeline.py
