@@ -9,6 +9,104 @@ _HEADING_RE = re.compile(r"^(?:第[0-9一二三四五六七八九十百千]+章\
 _STRATEGY_LINE_RE = re.compile(r"^第[0-9一二三四五六七八九十]+个策略")
 
 # ---------------------------------------------------------------------------
+# Guard Token constants and patterns
+# ---------------------------------------------------------------------------
+_GUARD_PREFIX = "[[GUARD_TOKEN_"
+_GUARD_SUFFIX = "]]"
+_GUARD_TOKEN_RE = re.compile(r"\[\[GUARD_TOKEN_\d{3}\]\]")
+
+# Patterns for entities that must survive LLM processing intact
+# Applied in order from most-specific to least-specific to avoid partial overlap
+_PROTECT_TAG_RE = re.compile(r"<[A-Za-z][A-Za-z0-9_]*(?:\s[^<>]*)?>")
+_PROTECT_CITATION_BRACKET_RE = re.compile(r"\[\d+(?:[,，\s]+\d+)*\]")
+_PROTECT_CITATION_AUTHOR_RE = re.compile(r"\([A-Z][A-Za-z\s,\.&]+,?\s*\d{4}[a-z]?\)")
+_PROTECT_ENGLISH_NAME_RE = re.compile(r"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)+\b")
+_PROTECT_YEAR_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
+
+_REFERENCES_HEADER_RE = re.compile(
+    r"^(?:参考文献|References|Bibliography)\s*$",
+    re.IGNORECASE,
+)
+
+# ---------------------------------------------------------------------------
+# Guard Context: protect sensitive entities during LLM processing
+# ---------------------------------------------------------------------------
+
+
+class GuardContext:
+    """Extract → placeholder → restore mechanism for sensitive text entities.
+
+    Protects XML/HTML-like tags (``<role>``), bracket citations (``[1]``),
+    author-year citations (``(Doe, 2024)``), English proper names, and years
+    from being modified or dropped by the LLM.  Reference-only paragraphs are
+    detected separately via :func:`is_references_section`.
+
+    Usage::
+
+        ctx = GuardContext()
+        protected, token_map = ctx.protect(text)
+        # … send *protected* to the LLM …
+        restored = ctx.restore(llm_output, token_map)
+    """
+
+    def protect(self, text: str) -> tuple[str, dict[str, str]]:
+        """Replace sensitive entities with opaque guard tokens.
+
+        Returns ``(protected_text, token_map)`` where *token_map* maps each
+        ``[[GUARD_TOKEN_NNN]]`` back to the original string it replaced.
+        """
+        token_map: dict[str, str] = {}
+        counter = [0]
+
+        def _make_token(original: str) -> str:
+            idx = counter[0]
+            counter[0] += 1
+            token = f"{_GUARD_PREFIX}{idx:03d}{_GUARD_SUFFIX}"
+            token_map[token] = original
+            return token
+
+        result = text
+
+        # Apply patterns from most-specific to least-specific so that later
+        # patterns cannot match inside an already-tokenised span.
+        result = _PROTECT_TAG_RE.sub(lambda m: _make_token(m.group()), result)
+        result = _PROTECT_CITATION_BRACKET_RE.sub(lambda m: _make_token(m.group()), result)
+        result = _PROTECT_CITATION_AUTHOR_RE.sub(lambda m: _make_token(m.group()), result)
+        result = _PROTECT_ENGLISH_NAME_RE.sub(lambda m: _make_token(m.group()), result)
+        result = _PROTECT_YEAR_RE.sub(lambda m: _make_token(m.group()), result)
+
+        return result, token_map
+
+    @staticmethod
+    def restore(text: str, token_map: dict[str, str]) -> str:
+        """Replace every guard token in *text* with its original string."""
+        result = text
+        for token, original in token_map.items():
+            result = result.replace(token, original)
+        return result
+
+    @staticmethod
+    def count_tokens(text: str, token_map: dict[str, str]) -> int:
+        """Return the number of guard tokens from *token_map* present in *text*."""
+        return sum(1 for token in token_map if token in text)
+
+
+def is_references_section(text: str) -> bool:
+    """Return ``True`` if *text* is a references/bibliography block.
+
+    A chunk is treated as a references section when its **first non-empty
+    line** matches the known section headers (参考文献, References,
+    Bibliography).  Such chunks should be passed through unchanged without LLM
+    processing.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return False
+    first_line = stripped.splitlines()[0].strip()
+    return bool(_REFERENCES_HEADER_RE.match(first_line))
+
+
+# ---------------------------------------------------------------------------
 # Entity hallucination detection patterns
 # ---------------------------------------------------------------------------
 _PERCENTAGE_RE = re.compile(r"\d+(?:\.\d+)?%")
