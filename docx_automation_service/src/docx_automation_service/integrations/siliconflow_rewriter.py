@@ -29,6 +29,14 @@ from docx_automation_service.integrations.base import Rewriter
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Output validation constants
+# ---------------------------------------------------------------------------
+_GUARD_TOKEN_RE = re.compile(r"\[\[GUARD_TOKEN_\d{3}\]\]")
+# Non-Chinese chars: exclude ASCII punctuation, digits, whitespace, and guard tokens
+_NON_CHINESE_RE = re.compile(r"[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\s\d.,，。、；：！？【】《》\u201c\u201d\u2018\u2019\(\)\[\]]")
+_MAX_VALIDATE_RETRIES = 2
+
+# ---------------------------------------------------------------------------
 # Blacklist: AI high-frequency terms → natural replacements
 # Sourced from empirical analysis of GPTZero / Turnitin flagging patterns.
 # ---------------------------------------------------------------------------
@@ -70,6 +78,8 @@ _SYSTEM_PROMPT = (
     "4. 【黑名单词汇剔除】"
     "删除高频AI腔词并替换为朴素技术表达，避免宏大叙事和夸张修辞。\n\n"
     "保留所有引文标记【文献XX】[1] (Author, Year)、数学符号、代码片段、变量名。"
+    "【章节标题冻结】：绝对禁止修改任何章节标题或小节名称的语义；对不确定的词保持原样。"
+    "【占位符冻结】：文本中形如 [[GUARD_TOKEN_NNN]] 的占位符绝对禁止修改、删除或翻译，原样保留。"
     "绝不编造事实、数据或引用。"
     "禁止输出思考过程、策略分点、推理草稿、用户需求复述。"
     "禁止出现'为了规避AI检测'之类元话语。"
@@ -88,7 +98,10 @@ _AIGC_STRATEGY_1_SYSTEM_PROMPT = (
     "具体年份或平台案例。原文没有的数据和事实绝对不可无中生有！\n"
     "2. 【禁止内容扩写】：你的任务是\u201c润色\u201d而非\u201c扩写\u201d。不要为了增加细节而编造任何原文未提及的论据。\n"
     "3. 【禁止跨学科乱入】：严格遵守给定的学术语境。如原文是文科理论，严禁在改写中混入软件工程、"
-    "代码测试、硬件性能等理工科术语。\n\n"
+    "代码测试、硬件性能等理工科术语。\n"
+    "4. 【章节标题冻结】：绝对禁止修改任何章节标题或小节名称的语义（如\u201c结论\u201d不得改为\u201c总结与展望\u201d），"
+    "对不确定的词保持原样。\n"
+    "5. 【占位符冻结】：文本中形如 [[GUARD_TOKEN_NNN]] 的占位符绝对禁止修改、删除或翻译，原样保留。\n\n"
     "# Rhetorical Guidelines (润色策略):\n"
     "1. 【词汇降温】：\n"
     "   - 剔除或替换 AI 常用宏大词汇。"
@@ -116,7 +129,9 @@ _AIGC_STRATEGY_2_LAYER1_SYSTEM_PROMPT = (
     "# Strict Constraints:\n"
     "1. 【绝对保真】：严禁修改任何数据、百分比、文献引用标记[X]、专有名词和事实案例。\n"
     "2. 【禁止改变句法结构】：不要拆分或合并原有句子，绝对保留原有的段落和逻辑结构"
-    "（包括\u201c其一、其二\u201d等列表格式）。\n\n"
+    "（包括\u201c其一、其二\u201d等列表格式）。\n"
+    "3. 【章节标题冻结】：绝对禁止修改任何章节标题或小节名称；对不确定的词保持原样。\n"
+    "4. 【占位符冻结】：文本中形如 [[GUARD_TOKEN_NNN]] 的占位符绝对禁止修改、删除或翻译，原样保留。\n\n"
     "# Action:\n"
     "请扫描全文，将以下典型的大模型高频词汇替换为平实的传统学术表达：\n"
     "- 禁用词：赋能、底层逻辑、颗粒度、抓手、闭环、潜移默化、跨越式发展、前所未有、协同演进。\n"
@@ -133,7 +148,9 @@ _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT = (
     "# Task: 对文本进行\u201c句法破序\u201d重构，打破呆板的机器写作结构。\n\n"
     "# Strict Constraints:\n"
     "1. 【零幻觉】：绝对禁止增加原文没有的实验数据、百分比或文献引用！\n"
-    "2. 【保留事实】：不能删除上一轮文本中包含的核心观点和专业术语。\n\n"
+    "2. 【保留事实】：不能删除上一轮文本中包含的核心观点和专业术语。\n"
+    "3. 【章节标题冻结】：绝对禁止修改任何章节标题或小节名称；对不确定的词保持原样。\n"
+    "4. 【占位符冻结】：文本中形如 [[GUARD_TOKEN_NNN]] 的占位符绝对禁止修改、删除或翻译，原样保留。\n\n"
     "# Action:\n"
     "1. 打破对称：如果原文存在生硬的列表格式（如\u201c一方面...另一方面...\u201d、\u201c其一...其二...\u201d），"
     "请将其融合成一个自然连贯的长段落。\n"
@@ -141,6 +158,40 @@ _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT = (
     "使用\u201c更深层来看\u201d、\u201c这导致了\u201d、\u201c此外\u201d等关联词让逻辑自然流动。\n"
     "3. 消除说教：删除形如\u201c既不能...也不能...\u201d的端水式废话，保留直接客观的陈述。\n"
     "直接输出重组后的文本。"
+)
+
+# ---------------------------------------------------------------------------
+# AIGC Reduction Strategy 3 – perplexity/burstiness humanization
+# Target: reduce AIGC detection rate to <20%
+# ---------------------------------------------------------------------------
+_AIGC_STRATEGY_3_SYSTEM_PROMPT = (
+    "# Role: 具有十年论文写作经验的中国高校研究生\n\n"
+    "# Task:\n"
+    "将提供的学术论文段落重写为具有真实人类写作特征的版本，目标是通过困惑度（Perplexity）注入和"
+    "突现度（Burstiness）调整将 AIGC 检测率降至 20% 以下，同时绝对保持原意、逻辑框架和专业术语不变。\n\n"
+    "# Absolute Red Lines (绝对红线，任何违反即任务失败):\n"
+    "1. 【零幻觉】：严禁凭空捏造或修改任何实验数据、百分比、算法名称、文献引用标记（如[1]、(Doe, 2024)）、具体年份。\n"
+    "2. 【章节标题冻结】：绝对禁止修改章节标题或小节名称的语义；对不确定的词保持原样。\n"
+    "3. 【占位符冻结】：文本中形如 [[GUARD_TOKEN_NNN]] 的占位符绝对禁止修改、删除、翻译或移位，"
+    "必须原样出现在输出中。\n"
+    "4. 【语言单一】：输出必须是纯中文（专业英文缩写、代码片段、变量名除外），"
+    "严禁混入整句英文、德文或其他外语。\n"
+    "5. 【禁止扩写】：不得新增原文没有提及的论据、数据或案例。\n\n"
+    "# Human Writing Feature Injection (人类写作特征注入策略):\n"
+    "1. 【句式扰动 - 提升 Burstiness】：\n"
+    "   - 强制长短句交替：在每 3-4 个长句后插入一个短促的总结句（10-20字）。\n"
+    "   - 打断 AI 的对称排比句式，避免每句长度相近形成的\u201c匀速感\u201d。\n"
+    "2. 【人类衔接词注入 - 降低 Perplexity 均匀性】：\n"
+    "   - 在陈述过渡处合理引入人类习惯衔接词："
+    "事实上、需要注意的是、然而实际上、从工程角度看、这里存在一个矛盾、值得一提的是。\n"
+    "   - 禁止使用：\u201c本文指出\u201d、\u201c综上所述\u201d、\u201c不言而喻\u201d、\u201c由此可见\u201d（高频 AI 特征词）。\n"
+    "3. 【学术口语化微调（有限度）】：\n"
+    "   - 允许在非正式过渡句中使用轻度的研究者习惯表达，但主体必须保持严肃学术风格。\n"
+    "4. 【词汇黑名单替换】：\n"
+    "   - 禁用高频 AI 词汇并替换：赋能→支持、底层逻辑→基本机制、颗粒度→细粒度、"
+    "综上所述→总结来看、不言而喻→显然、协同演进→共同发展。\n\n"
+    "# Output Format:\n"
+    "仅输出重写后的段落文本，不要包含任何解释、分析、前缀或策略说明。"
 )
 
 # ---------------------------------------------------------------------------
@@ -216,6 +267,8 @@ class SiliconFlowRewriter(Rewriter):
         global_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
+        previous_context: str | None = None,
+        token_map: dict[str, str] | None = None,
     ) -> str:
         if not self._api_key:
             return text
@@ -233,6 +286,7 @@ class SiliconFlowRewriter(Rewriter):
             preserve_terms=preserve_terms,
             strong_restructure=False,
             global_context=global_context,
+            previous_context=previous_context,
         )
 
         if not enable_reasoning:
@@ -273,6 +327,37 @@ class SiliconFlowRewriter(Rewriter):
         content = _extract_message_text(message)
         result = content.strip() or text
 
+        # Output validation with retry for language leak / truncation / guard-token loss
+        valid, reason = validate_rewrite_output(result, text, token_map)
+        if not valid:
+            logger.warning(
+                "rewrite output validation failed | reason=%s | retrying (max=%s)",
+                reason,
+                _MAX_VALIDATE_RETRIES,
+            )
+            for _attempt in range(_MAX_VALIDATE_RETRIES):
+                retry_data = await self._request_completion(payload, headers, timeout, text_len=len(text))
+                if retry_data is None:
+                    break
+                retry_choices = retry_data.get("choices") or []
+                if not retry_choices:
+                    break
+                retry_message = retry_choices[0].get("message", {}) or {}
+                retry_content = _extract_message_text(retry_message).strip()
+                if retry_content:
+                    retry_valid, retry_reason = validate_rewrite_output(retry_content, text, token_map)
+                    if retry_valid:
+                        result = retry_content
+                        logger.info("rewrite output validation passed after retry | attempt=%s", _attempt + 1)
+                        break
+                    logger.warning(
+                        "rewrite retry %s still invalid | reason=%s", _attempt + 1, retry_reason
+                    )
+            else:
+                logger.warning(
+                    "rewrite output validation failed after all retries; using best available result"
+                )
+
         if settings.rewrite_retry_on_low_change and len(text) >= 140:
             change_ratio = _normalized_change_ratio(text, result)
             if change_ratio < settings.rewrite_min_change_ratio:
@@ -287,6 +372,7 @@ class SiliconFlowRewriter(Rewriter):
                     preserve_terms=preserve_terms,
                     strong_restructure=True,
                     global_context=global_context,
+                    previous_context=previous_context,
                 )
                 stronger_payload = {
                     "model": selected_model,
@@ -436,6 +522,8 @@ def _select_system_prompt(aigc_reduction_strategy: str | None) -> str:
         return _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT
     if aigc_reduction_strategy == "strategy_2":
         return _AIGC_STRATEGY_2_LAYER1_SYSTEM_PROMPT
+    if aigc_reduction_strategy == "strategy_3":
+        return _AIGC_STRATEGY_3_SYSTEM_PROMPT
     return _SYSTEM_PROMPT
 
 
@@ -469,6 +557,7 @@ def _build_user_prompt(
     preserve_terms: list[str],
     strong_restructure: bool,
     global_context: str | None = None,
+    previous_context: str | None = None,
 ) -> dict:
     constraints = [
         "【核心论意】保留核心论点100%，数据准确，引文标记（[1]、(Doe, 2024)、【文献01】）绝不改动。",
@@ -485,6 +574,7 @@ def _build_user_prompt(
         ),
         "【排比禁用】禁止排比对仗、宏大叙事、文学化修辞。改用技术文档风格：主谓宾清晰，证据驱动，边界明确。",
         "【事实边界】不得新增具体实验数据、年份、机构统计、平台案例，除非原文已经提供。",
+        "【占位符保留】文本中形如 [[GUARD_TOKEN_NNN]] 的占位符绝对禁止修改、删除或翻译，原样保留。",
         "【输出格式】仅返回改写文本，无前缀、无解释、无标记。如果你有内部思考，不得展示给用户。",
     ]
 
@@ -504,6 +594,12 @@ def _build_user_prompt(
     if global_context:
         prompt["global_context"] = f"<global_context>\n{global_context}\n</global_context>"
 
+    if previous_context:
+        prompt["previous_context"] = (
+            f"这是上一段的结尾（请承接其语气和逻辑重写当前段落，但输出只包含当前段落重写后的内容）："
+            f"\n{previous_context}"
+        )
+
     return prompt
 
 
@@ -519,3 +615,50 @@ def _normalized_change_ratio(original: str, rewritten: str) -> float:
     max_len = max(len(src), len(dst), 1)
     similarity = same / max_len
     return max(0.0, min(1.0, 1.0 - similarity))
+
+
+def validate_rewrite_output(
+    output: str,
+    original: str,
+    token_map: dict[str, str] | None = None,
+) -> tuple[bool, str]:
+    """Validate LLM rewrite output for common failure modes.
+
+    Checks (in order):
+    1. **Language leak** – if non-Chinese characters (excluding guard tokens,
+       punctuation, digits, and whitespace) make up more than 10 % of the
+       non-whitespace content, the output is flagged as a multi-language
+       hallucination.
+    2. **Length truncation** – if the output is shorter than 30 % of the
+       original text length, the model likely refused or was cut off.
+    3. **Guard-token loss** – if *token_map* is provided and the number of
+       guard tokens present in the output does not match the number sent in,
+       the model swallowed a protected entity.
+
+    Returns ``(valid, reason)`` where *reason* is an empty string when valid.
+    """
+    if not output:
+        return False, "empty_output"
+
+    # 1. Language-leak check: strip guard tokens then count non-Chinese chars
+    text_without_tokens = _GUARD_TOKEN_RE.sub("", output)
+    non_whitespace = re.sub(r"\s+", "", text_without_tokens)
+    if non_whitespace:
+        non_chinese_chars = _NON_CHINESE_RE.findall(non_whitespace)
+        ratio = len(non_chinese_chars) / max(len(non_whitespace), 1)
+        if ratio > 0.10:
+            return False, f"language_leak(ratio={ratio:.2f})"
+
+    # 2. Length truncation check
+    original_len = len(original.strip())
+    if original_len > 0 and len(output.strip()) < original_len * 0.30:
+        return False, f"length_truncated(output={len(output.strip())},original={original_len})"
+
+    # 3. Guard-token count check
+    if token_map:
+        expected = len(token_map)
+        found = sum(1 for token in token_map if token in output)
+        if found != expected:
+            return False, f"guard_token_loss(expected={expected},found={found})"
+
+    return True, ""

@@ -232,18 +232,25 @@ class PipelineService:
                     message="正在并发改写文本块...",
                 )
 
-                # Build (chunk, risk) pairs that need rewriting
-                rewrite_pairs = [
-                    (chunk, risks[i])
-                    for i, chunk in enumerate(chunks)
-                    if (mode == "rewrite" and risks[i].flagged)
-                    or (mode == "deep_rewrite" and (risks[i].flagged or settings.deep_rewrite_process_all_chunks))
-                ]
+                # Build (chunk, risk, previous_context) triples that need rewriting.
+                # previous_context carries the last 100 chars of the preceding document
+                # chunk (using the original text) so the LLM can maintain tonal/logical
+                # continuity across paragraph boundaries.
+                rewrite_triples: list[tuple] = []
+                for i, chunk in enumerate(chunks):
+                    if (mode == "rewrite" and risks[i].flagged) or (
+                        mode == "deep_rewrite"
+                        and (risks[i].flagged or settings.deep_rewrite_process_all_chunks)
+                    ):
+                        prev_ctx: str | None = None
+                        if i > 0:
+                            prev_ctx = chunks[i - 1].text[-100:] or None
+                        rewrite_triples.append((chunk, risks[i], prev_ctx))
 
-                if rewrite_pairs:
+                if rewrite_triples:
                     logger.info(
                         "parallel rewrite starting | run_id=%s | chunks_to_rewrite=%s | mode=%s",
-                        run_id, len(rewrite_pairs), mode,
+                        run_id, len(rewrite_triples), mode,
                     )
                     if mode == "rewrite":
                         rewrite_coros = [
@@ -258,8 +265,9 @@ class PipelineService:
                                 aigc_reduction_strategy=aigc_reduction_strategy,
                                 enable_structural_rebuild=enable_structural_rebuild,
                                 rewrite_failures=rewrite_failures,
+                                previous_context=prev_ctx,
                             )
-                            for chunk, _ in rewrite_pairs
+                            for chunk, _, prev_ctx in rewrite_triples
                         ]
                     else:  # deep_rewrite
                         rewrite_coros = [
@@ -274,14 +282,15 @@ class PipelineService:
                                 aigc_reduction_strategy=aigc_reduction_strategy,
                                 enable_structural_rebuild=enable_structural_rebuild,
                                 rewrite_failures=rewrite_failures,
+                                previous_context=prev_ctx,
                             )
-                            for chunk, _ in rewrite_pairs
+                            for chunk, _, prev_ctx in rewrite_triples
                         ]
 
                     results = await asyncio.gather(*rewrite_coros)
 
                     # Apply results and collect layer reports
-                    for (chunk, risk_entry), result in zip(rewrite_pairs, results):
+                    for (chunk, risk_entry, _prev_ctx), result in zip(rewrite_triples, results):
                         if mode == "rewrite":
                             rewritten_text = result
                             self.mapper.apply_text(doc, chunk, rewritten_text)
@@ -388,6 +397,7 @@ class PipelineService:
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
         rewrite_failures: list[dict[str, str]],
+        previous_context: str | None = None,
     ) -> tuple[str, list[LayerReport]]:
         """Run all three layers on one chunk.
 
@@ -440,6 +450,7 @@ class PipelineService:
                     global_context=global_context,
                     aigc_reduction_strategy=aigc_reduction_strategy,
                     enable_structural_rebuild=enable_structural_rebuild,
+                    previous_context=previous_context,
                 )
             if rewritten and rewritten.strip():
                 current = rewritten
@@ -509,6 +520,7 @@ class PipelineService:
         aigc_reduction_strategy: str | None,
         enable_structural_rebuild: bool,
         rewrite_failures: list[dict[str, str]],
+        previous_context: str | None = None,
     ) -> str:
         """Rewrite a single chunk (mode=rewrite), catching exceptions."""
         try:
@@ -524,6 +536,7 @@ class PipelineService:
                 global_context=global_context,
                 aigc_reduction_strategy=aigc_reduction_strategy,
                 enable_structural_rebuild=enable_structural_rebuild,
+                previous_context=previous_context,
             )
         except Exception as exc:  # noqa: BLE001
             rewrite_failures.append({"chunk_id": chunk.chunk_id, "error": str(exc)})
@@ -546,6 +559,7 @@ class PipelineService:
         aigc_reduction_strategy: str | None,
         enable_structural_rebuild: bool,
         rewrite_failures: list[dict[str, str]],
+        previous_context: str | None = None,
     ) -> tuple[str, list[LayerReport]]:
         """Wrapper around _deep_rewrite_chunk for parallel gather."""
         return await self._deep_rewrite_chunk(
@@ -561,6 +575,7 @@ class PipelineService:
             aigc_reduction_strategy=aigc_reduction_strategy,
             enable_structural_rebuild=enable_structural_rebuild,
             rewrite_failures=rewrite_failures,
+            previous_context=previous_context,
         )
 
     # ------------------------------------------------------------------
@@ -649,6 +664,7 @@ class PipelineService:
         global_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
+        previous_context: str | None = None,
     ) -> str:
         chunks = split_for_rewrite(
             text,
@@ -656,6 +672,9 @@ class PipelineService:
             max_chars=settings.rewrite_chunk_max_chars,
         )
         rewritten_parts: list[str] = []
+        # previous_context for the first sub-chunk comes from the preceding document chunk;
+        # for subsequent sub-chunks it is the tail of the just-rewritten sub-chunk.
+        sub_prev_ctx = previous_context
         for part in chunks:
             rewritten = await self._rewrite_once(
                 part,
@@ -666,6 +685,7 @@ class PipelineService:
                 global_context=global_context,
                 aigc_reduction_strategy=aigc_reduction_strategy,
                 enable_structural_rebuild=enable_structural_rebuild,
+                previous_context=sub_prev_ctx,
             )
             if settings.sanitize_model_output:
                 rewritten = sanitize_model_output(
@@ -674,6 +694,8 @@ class PipelineService:
                     source_is_heading=source_is_heading,
                 )
             rewritten_parts.append(rewritten)
+            # Pass the tail of this sub-chunk as context for the next sub-chunk
+            sub_prev_ctx = rewritten[-100:] if rewritten else None
 
         return "".join(rewritten_parts).strip() or text
 
@@ -688,6 +710,7 @@ class PipelineService:
         global_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
+        previous_context: str | None = None,
     ) -> str:
         try:
             return await self.rewriter.rewrite(
@@ -699,6 +722,7 @@ class PipelineService:
                 global_context=global_context,
                 aigc_reduction_strategy=aigc_reduction_strategy,
                 enable_structural_rebuild=enable_structural_rebuild,
+                previous_context=previous_context,
             )
         except TypeError:
             return await self.rewriter.rewrite(

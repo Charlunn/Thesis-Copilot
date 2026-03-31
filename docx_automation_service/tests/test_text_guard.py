@@ -1,6 +1,8 @@
 from docx_automation_service.services.text_guard import (
+    GuardContext,
     check_entity_hallucination,
     is_heading_like,
+    is_references_section,
     sanitize_model_output,
     split_for_rewrite,
 )
@@ -111,3 +113,144 @@ def test_sanitize_model_output_falls_back_on_hallucination() -> None:
     generated = "信息茧房由桑斯坦提出，研究表明固化率高达78.5%，详见[2]。"
     result = sanitize_model_output(generated, original_text=source, source_is_heading=False)
     assert result == source
+
+
+# ---------------------------------------------------------------------------
+# GuardContext tests
+# ---------------------------------------------------------------------------
+
+def test_guard_context_protects_xml_tags() -> None:
+    ctx = GuardContext()
+    text = "请<role>管理员</role>审核该功能。"
+    protected, token_map = ctx.protect(text)
+    assert "<role>" not in protected
+    assert len(token_map) == 1
+    restored = ctx.restore(protected, token_map)
+    assert restored == text
+
+
+def test_guard_context_protects_bracket_citations() -> None:
+    ctx = GuardContext()
+    text = "研究表明[1]，该方法有效[2,3]。"
+    protected, token_map = ctx.protect(text)
+    assert "[1]" not in protected
+    assert "[2,3]" not in protected
+    restored = ctx.restore(protected, token_map)
+    assert restored == text
+
+
+def test_guard_context_protects_author_year_citations() -> None:
+    ctx = GuardContext()
+    text = "信息茧房由 Sunstein (2001) 提出。"
+    protected, token_map = ctx.protect(text)
+    # The author name and/or year should be tokenised (pattern may capture as one or two tokens)
+    assert "(2001)" not in protected and "Sunstein" not in protected
+    restored = ctx.restore(protected, token_map)
+    assert restored == text
+
+
+def test_guard_context_protects_english_names() -> None:
+    ctx = GuardContext()
+    text = "该研究由 John Smith 和 Mary Johnson 共同完成。"
+    protected, token_map = ctx.protect(text)
+    assert "John Smith" not in protected
+    assert "Mary Johnson" not in protected
+    restored = ctx.restore(protected, token_map)
+    assert restored == text
+
+
+def test_guard_context_protects_years() -> None:
+    ctx = GuardContext()
+    text = "该算法于2021年发布，并在2023年得到改进。"
+    protected, token_map = ctx.protect(text)
+    assert "2021" not in protected
+    assert "2023" not in protected
+    restored = ctx.restore(protected, token_map)
+    assert restored == text
+
+
+def test_guard_context_restore_is_lossless() -> None:
+    ctx = GuardContext()
+    text = (
+        "根据 Smith (2020) 的研究[1]，<role>用户</role>在2022年的参与度提升了。"
+    )
+    protected, token_map = ctx.protect(text)
+    restored = ctx.restore(protected, token_map)
+    assert restored == text
+
+
+def test_guard_context_count_tokens() -> None:
+    ctx = GuardContext()
+    text = "参见[1]和[2]。"
+    protected, token_map = ctx.protect(text)
+    assert ctx.count_tokens(protected, token_map) == len(token_map)
+    # Simulate a model dropping one token
+    one_dropped = protected.replace(list(token_map.keys())[0], "")
+    assert ctx.count_tokens(one_dropped, token_map) == len(token_map) - 1
+
+
+def test_is_references_section_detects_chinese_header() -> None:
+    assert is_references_section("参考文献\n[1] Doe, J. 2024.") is True
+
+
+def test_is_references_section_detects_english_header() -> None:
+    assert is_references_section("References\n[1] Smith, A. (2020).") is True
+
+
+def test_is_references_section_false_for_body_text() -> None:
+    assert is_references_section("本文的研究方法采用了定量分析。") is False
+
+
+def test_is_references_section_false_for_empty_text() -> None:
+    assert is_references_section("") is False
+
+
+# ---------------------------------------------------------------------------
+# validate_rewrite_output tests
+# ---------------------------------------------------------------------------
+
+from docx_automation_service.integrations.siliconflow_rewriter import validate_rewrite_output
+
+
+def test_validate_rewrite_output_passes_valid_chinese() -> None:
+    original = "这是一段学术论文的正文内容，讨论了相关研究方法和实验设计。"
+    output = "此段学术文本涉及研究方法与实验设计的阐述，内容符合学术规范。"
+    valid, reason = validate_rewrite_output(output, original)
+    assert valid is True
+    assert reason == ""
+
+
+def test_validate_rewrite_output_detects_language_leak() -> None:
+    original = "这是一段中文学术论文内容。"
+    # Mostly English output – language leak
+    output = "This is an English paragraph that replaced the Chinese text completely."
+    valid, reason = validate_rewrite_output(output, original)
+    assert valid is False
+    assert "language_leak" in reason
+
+
+def test_validate_rewrite_output_detects_length_truncation() -> None:
+    original = "这是一段较长的学术论文内容" * 10  # 120+ chars
+    output = "太短了。"
+    valid, reason = validate_rewrite_output(output, original)
+    assert valid is False
+    assert "length_truncated" in reason
+
+
+def test_validate_rewrite_output_detects_guard_token_loss() -> None:
+    original = "研究表明[1]效果显著。"
+    token_map = {"[[GUARD_TOKEN_000]]": "[1]"}
+    # Output is missing the guard token
+    output = "研究表明效果显著。"
+    valid, reason = validate_rewrite_output(output, original, token_map)
+    assert valid is False
+    assert "guard_token_loss" in reason
+
+
+def test_validate_rewrite_output_passes_with_guard_tokens_present() -> None:
+    original = "研究表明[1]效果显著。"
+    token_map = {"[[GUARD_TOKEN_000]]": "[1]"}
+    output = "研究结果表明[[GUARD_TOKEN_000]]效果显著。"
+    valid, reason = validate_rewrite_output(output, original, token_map)
+    assert valid is True
+    assert reason == ""
