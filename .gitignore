@@ -7,3 +7,4 @@ node_modules/
 dist/
 .runtime/
 build/
+docx_automation_service/.env
