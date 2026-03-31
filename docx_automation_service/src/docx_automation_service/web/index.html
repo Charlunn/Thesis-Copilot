@@ -79,6 +79,22 @@
             </label>
           </div>
 
+          <div class="grid-2">
+            <label>
+              去 AI 化策略
+              <select id="aigc_reduction_strategy" name="aigc_reduction_strategy">
+                <option value="">默认（四大核心策略）</option>
+                <option value="strategy_1">策略 1：综合单次执行（高风险/高收益）</option>
+                <option value="strategy_2" selected>策略 2：分层可选执行（推荐）</option>
+              </select>
+            </label>
+
+            <label class="toggle-row" id="layer2-toggle-wrap">
+              <input id="enable_structural_rebuild" name="enable_structural_rebuild" type="checkbox" />
+              <span>深度结构重组（可能改变段落原貌）</span>
+            </label>
+          </div>
+
           <button id="submit-btn" type="submit">提交任务</button>
         </form>
       </section>

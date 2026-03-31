@@ -62,6 +62,19 @@ class PipelineService:
             reasoning_enabled=enable_reasoning,
         )
 
+    def update_run_aigc_options(
+        self,
+        run_id: str,
+        *,
+        aigc_reduction_strategy: str | None,
+        enable_structural_rebuild: bool,
+    ) -> None:
+        self._update_record(
+            run_id,
+            aigc_reduction_strategy=aigc_reduction_strategy,
+            enable_structural_rebuild=enable_structural_rebuild,
+        )
+
     def start_run_in_background(
         self,
         *,
@@ -72,6 +85,8 @@ class PipelineService:
         preserve_terms: list[str] | None,
         model_name: str | None = None,
         enable_reasoning: bool = True,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
     ) -> None:
         task = asyncio.create_task(
             self.run_existing(
@@ -82,6 +97,8 @@ class PipelineService:
                 preserve_terms=preserve_terms,
                 model_name=model_name,
                 enable_reasoning=enable_reasoning,
+                aigc_reduction_strategy=aigc_reduction_strategy,
+                enable_structural_rebuild=enable_structural_rebuild,
             )
         )
         self.tasks[run_id] = task
@@ -99,6 +116,8 @@ class PipelineService:
         preserve_terms: list[str] | None = None,
         model_name: str | None = None,
         enable_reasoning: bool = True,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
     ) -> RunRecord:
         record = self.create_run_record(mode)
         self.update_run_options(record.run_id, model_name=model_name, enable_reasoning=enable_reasoning)
@@ -110,6 +129,8 @@ class PipelineService:
             preserve_terms=preserve_terms,
             model_name=model_name,
             enable_reasoning=enable_reasoning,
+            aigc_reduction_strategy=aigc_reduction_strategy,
+            enable_structural_rebuild=enable_structural_rebuild,
         )
         return self.records[record.run_id]
 
@@ -123,6 +144,8 @@ class PipelineService:
         preserve_terms: list[str] | None = None,
         model_name: str | None = None,
         enable_reasoning: bool = True,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
     ) -> RunRecord:
         record = self.records.get(run_id)
         if record is None:
@@ -131,6 +154,11 @@ class PipelineService:
 
         preserve_terms = preserve_terms or []
         self.update_run_options(run_id, model_name=model_name, enable_reasoning=enable_reasoning)
+        self.update_run_aigc_options(
+            run_id,
+            aigc_reduction_strategy=aigc_reduction_strategy,
+            enable_structural_rebuild=enable_structural_rebuild,
+        )
 
         try:
             self._update_record(
@@ -158,6 +186,14 @@ class PipelineService:
 
             logger.info("chunk extraction done | run_id=%s | chunk_total=%s", run_id, len(chunks))
 
+            # --- Phase 0: Global context compression -----------------------
+            global_context: str | None = None
+            if mode in {"rewrite", "deep_rewrite"} and settings.global_context_enabled:
+                global_context = await self._compress_global_context(
+                    chunks, model_name=model_name
+                )
+
+            # --- Phase 1: Risk detection (sequential) ----------------------
             for idx, chunk in enumerate(chunks, start=1):
                 sim = self.similarity_detector.score(chunk.text)
                 aigc = self.aigc_detector.score(chunk.text)
@@ -172,62 +208,9 @@ class PipelineService:
                     )
                 )
 
-                if mode == "rewrite" and flagged:
-                    try:
-                        if settings.rewrite_skip_heading_chunks and chunk.ref.is_heading:
-                            rewritten = chunk.text
-                        else:
-                            rewritten = await self._rewrite_with_split(
-                                chunk.text,
-                                topic_hint=topic_hint,
-                                preserve_terms=preserve_terms,
-                                source_is_heading=chunk.ref.is_heading,
-                                model_name=model_name,
-                                enable_reasoning=enable_reasoning,
-                            )
-                        self.mapper.apply_text(doc, chunk, rewritten)
-                        logger.debug(
-                            "chunk rewrite done | run_id=%s | chunk_id=%s | text_len=%s→%s",
-                            run_id,
-                            chunk.chunk_id,
-                            len(chunk.text),
-                            len(rewritten),
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        rewrite_failures.append({"chunk_id": chunk.chunk_id, "error": str(exc)})
-                        logger.warning(
-                            "chunk rewrite failed; use original | run_id=%s | chunk_id=%s | error=%s",
-                            run_id,
-                            chunk.chunk_id,
-                            exc,
-                        )
-
-                elif mode == "deep_rewrite" and (flagged or settings.deep_rewrite_process_all_chunks):
-                    current_text, chunk_layer_reports = await self._deep_rewrite_chunk(
-                        chunk.text,
-                        chunk=chunk,
-                        chunk_id=chunk.chunk_id,
-                        run_id=run_id,
-                        topic_hint=topic_hint,
-                        preserve_terms=preserve_terms,
-                        model_name=model_name,
-                        enable_reasoning=enable_reasoning,
-                        rewrite_failures=rewrite_failures,
-                    )
-                    self.mapper.apply_text(doc, chunk, current_text)
-                    for lr in chunk_layer_reports:
-                        _merge_layer_report(layer_reports, lr)
-
-                    # Attach per-chunk Layer 3 metrics to risk entry
-                    risk_entry = next((r for r in risks if r.chunk_id == chunk.chunk_id), None)
-                    if risk_entry is not None:
-                        analysis = analyze_text(current_text)
-                        risk_entry.burstiness_score = analysis.burstiness_score
-                        risk_entry.layer3_risk_score = analysis.layer3_risk_score
-
                 self._update_progress_by_chunk(
                     run_id,
-                    mode=mode,
+                    mode="analyze",
                     current_chunk=idx,
                     total_chunks=total_chunks,
                 )
@@ -239,6 +222,81 @@ class PipelineService:
                 flagged_total,
                 len(chunks),
             )
+
+            # --- Phase 2: Parallel rewriting -------------------------------
+            if mode in {"rewrite", "deep_rewrite"}:
+                self._update_record(
+                    run_id,
+                    current_stage="rewriting",
+                    progress_percent=45.0,
+                    message="正在并发改写文本块...",
+                )
+
+                # Build (chunk, risk) pairs that need rewriting
+                rewrite_pairs = [
+                    (chunk, risks[i])
+                    for i, chunk in enumerate(chunks)
+                    if (mode == "rewrite" and risks[i].flagged)
+                    or (mode == "deep_rewrite" and (risks[i].flagged or settings.deep_rewrite_process_all_chunks))
+                ]
+
+                if rewrite_pairs:
+                    logger.info(
+                        "parallel rewrite starting | run_id=%s | chunks_to_rewrite=%s | mode=%s",
+                        run_id, len(rewrite_pairs), mode,
+                    )
+                    if mode == "rewrite":
+                        rewrite_coros = [
+                            self._rewrite_chunk_safe(
+                                chunk,
+                                run_id=run_id,
+                                topic_hint=topic_hint,
+                                preserve_terms=preserve_terms,
+                                model_name=model_name,
+                                enable_reasoning=enable_reasoning,
+                                global_context=global_context,
+                                aigc_reduction_strategy=aigc_reduction_strategy,
+                                enable_structural_rebuild=enable_structural_rebuild,
+                                rewrite_failures=rewrite_failures,
+                            )
+                            for chunk, _ in rewrite_pairs
+                        ]
+                    else:  # deep_rewrite
+                        rewrite_coros = [
+                            self._deep_rewrite_chunk_safe(
+                                chunk,
+                                run_id=run_id,
+                                topic_hint=topic_hint,
+                                preserve_terms=preserve_terms,
+                                model_name=model_name,
+                                enable_reasoning=enable_reasoning,
+                                global_context=global_context,
+                                aigc_reduction_strategy=aigc_reduction_strategy,
+                                enable_structural_rebuild=enable_structural_rebuild,
+                                rewrite_failures=rewrite_failures,
+                            )
+                            for chunk, _ in rewrite_pairs
+                        ]
+
+                    results = await asyncio.gather(*rewrite_coros)
+
+                    # Apply results and collect layer reports
+                    for (chunk, risk_entry), result in zip(rewrite_pairs, results):
+                        if mode == "rewrite":
+                            rewritten_text = result
+                            self.mapper.apply_text(doc, chunk, rewritten_text)
+                            logger.debug(
+                                "chunk rewrite done | run_id=%s | chunk_id=%s | text_len=%s→%s",
+                                run_id, chunk.chunk_id, len(chunk.text), len(rewritten_text),
+                            )
+                        else:  # deep_rewrite
+                            current_text, chunk_layer_reports = result
+                            self.mapper.apply_text(doc, chunk, current_text)
+                            for lr in chunk_layer_reports:
+                                _merge_layer_report(layer_reports, lr)
+                            analysis = analyze_text(current_text)
+                            risk_entry.burstiness_score = analysis.burstiness_score
+                            risk_entry.layer3_risk_score = analysis.layer3_risk_score
 
             report = {
                 "run_id": run_id,
@@ -255,6 +313,8 @@ class PipelineService:
             }
             if mode == "deep_rewrite":
                 report["layer_reports"] = [lr.model_dump() for lr in layer_reports]
+            if global_context:
+                report["global_context_used"] = True
 
             report_path = self._run_dir(run_id) / "report.json"
             report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -324,6 +384,9 @@ class PipelineService:
         preserve_terms: list[str] | None,
         model_name: str | None,
         enable_reasoning: bool,
+        global_context: str | None = None,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
         rewrite_failures: list[dict[str, str]],
     ) -> tuple[str, list[LayerReport]]:
         """Run all three layers on one chunk.
@@ -374,6 +437,9 @@ class PipelineService:
                     source_is_heading=chunk.ref.is_heading,
                     model_name=model_name,
                     enable_reasoning=enable_reasoning,
+                    global_context=global_context,
+                    aigc_reduction_strategy=aigc_reduction_strategy,
+                    enable_structural_rebuild=enable_structural_rebuild,
                 )
             if rewritten and rewritten.strip():
                 current = rewritten
@@ -426,6 +492,120 @@ class PipelineService:
 
         return current, layer_reports
 
+    # ------------------------------------------------------------------
+    # Safe wrappers for parallel execution
+    # ------------------------------------------------------------------
+
+    async def _rewrite_chunk_safe(
+        self,
+        chunk,
+        *,
+        run_id: str,
+        topic_hint: str | None,
+        preserve_terms: list[str],
+        model_name: str | None,
+        enable_reasoning: bool,
+        global_context: str | None,
+        aigc_reduction_strategy: str | None,
+        enable_structural_rebuild: bool,
+        rewrite_failures: list[dict[str, str]],
+    ) -> str:
+        """Rewrite a single chunk (mode=rewrite), catching exceptions."""
+        try:
+            if settings.rewrite_skip_heading_chunks and chunk.ref.is_heading:
+                return chunk.text
+            return await self._rewrite_with_split(
+                chunk.text,
+                topic_hint=topic_hint,
+                preserve_terms=preserve_terms,
+                source_is_heading=chunk.ref.is_heading,
+                model_name=model_name,
+                enable_reasoning=enable_reasoning,
+                global_context=global_context,
+                aigc_reduction_strategy=aigc_reduction_strategy,
+                enable_structural_rebuild=enable_structural_rebuild,
+            )
+        except Exception as exc:  # noqa: BLE001
+            rewrite_failures.append({"chunk_id": chunk.chunk_id, "error": str(exc)})
+            logger.warning(
+                "chunk rewrite failed; use original | run_id=%s | chunk_id=%s | error=%s",
+                run_id, chunk.chunk_id, exc,
+            )
+            return chunk.text
+
+    async def _deep_rewrite_chunk_safe(
+        self,
+        chunk,
+        *,
+        run_id: str,
+        topic_hint: str | None,
+        preserve_terms: list[str],
+        model_name: str | None,
+        enable_reasoning: bool,
+        global_context: str | None,
+        aigc_reduction_strategy: str | None,
+        enable_structural_rebuild: bool,
+        rewrite_failures: list[dict[str, str]],
+    ) -> tuple[str, list[LayerReport]]:
+        """Wrapper around _deep_rewrite_chunk for parallel gather."""
+        return await self._deep_rewrite_chunk(
+            chunk.text,
+            chunk=chunk,
+            chunk_id=chunk.chunk_id,
+            run_id=run_id,
+            topic_hint=topic_hint,
+            preserve_terms=preserve_terms,
+            model_name=model_name,
+            enable_reasoning=enable_reasoning,
+            global_context=global_context,
+            aigc_reduction_strategy=aigc_reduction_strategy,
+            enable_structural_rebuild=enable_structural_rebuild,
+            rewrite_failures=rewrite_failures,
+        )
+
+    # ------------------------------------------------------------------
+    # Global context compression
+    # ------------------------------------------------------------------
+
+    async def _compress_global_context(
+        self,
+        chunks,
+        *,
+        model_name: str | None,
+    ) -> str | None:
+        """Compress the document skeleton into a minimal global context string.
+
+        Sends the first few non-heading paragraphs to the LLM and asks it to
+        extract 【核心论点】, 【所属学科】, and 【行文基调】.  Returns ``None``
+        when context compression is unavailable or fails.
+        """
+        compress_fn = getattr(self.rewriter, "compress_context", None)
+        if compress_fn is None:
+            return None
+
+        sample_chunks = [
+            c for c in chunks
+            if not c.ref.is_heading and len(c.text) > 30
+        ][:settings.global_context_sample_chunks]
+        sample_text = "\n\n".join(c.text for c in sample_chunks).strip()
+        if not sample_text:
+            return None
+
+        try:
+            ctx = await compress_fn(sample_text, model_name=model_name)
+            if ctx and isinstance(ctx, str):
+                logger.info(
+                    "global context compressed | context_len=%s | context=%s",
+                    len(ctx), ctx[:120],
+                )
+                return ctx
+            return None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "context compression failed | error=%s | continuing without global context", exc
+            )
+            return None
+
     def get_record(self, run_id: str) -> RunRecord | None:
         record = self.records.get(run_id)
         if record:
@@ -466,6 +646,9 @@ class PipelineService:
         source_is_heading: bool,
         model_name: str | None,
         enable_reasoning: bool,
+        global_context: str | None = None,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
     ) -> str:
         chunks = split_for_rewrite(
             text,
@@ -480,6 +663,9 @@ class PipelineService:
                 preserve_terms=preserve_terms,
                 model_name=model_name,
                 enable_reasoning=enable_reasoning,
+                global_context=global_context,
+                aigc_reduction_strategy=aigc_reduction_strategy,
+                enable_structural_rebuild=enable_structural_rebuild,
             )
             if settings.sanitize_model_output:
                 rewritten = sanitize_model_output(
@@ -499,6 +685,9 @@ class PipelineService:
         preserve_terms: list[str],
         model_name: str | None,
         enable_reasoning: bool,
+        global_context: str | None = None,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
     ) -> str:
         try:
             return await self.rewriter.rewrite(
@@ -507,6 +696,9 @@ class PipelineService:
                 preserve_terms=preserve_terms,
                 model_name=model_name,
                 enable_reasoning=enable_reasoning,
+                global_context=global_context,
+                aigc_reduction_strategy=aigc_reduction_strategy,
+                enable_structural_rebuild=enable_structural_rebuild,
             )
         except TypeError:
             return await self.rewriter.rewrite(

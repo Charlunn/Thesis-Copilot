@@ -176,9 +176,13 @@ class TestTextAnalyzer:
 from docx_automation_service.integrations.siliconflow_rewriter import (
     BLACKLIST_TERMS,
     SiliconFlowRewriter,
+    _AIGC_STRATEGY_1_SYSTEM_PROMPT,
+    _AIGC_STRATEGY_2_LAYER1_SYSTEM_PROMPT,
+    _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT,
     _SYSTEM_PROMPT,
     _build_user_prompt,
     _normalized_change_ratio,
+    _select_system_prompt,
 )
 
 
@@ -377,3 +381,134 @@ class TestMergeLayerReport:
             lr = LayerReport(layer=i, name=f"layer{i}", chunks_processed=1, chunks_skipped=0, available=True)
             _merge_layer_report(reports, lr)
         assert len(reports) == 3
+
+
+# ---------------------------------------------------------------------------
+# AIGC reduction strategy selection
+# ---------------------------------------------------------------------------
+
+class TestAIGCStrategySelection:
+    def test_select_system_prompt_default_returns_base(self):
+        prompt = _select_system_prompt(None)
+        assert prompt is _SYSTEM_PROMPT
+
+    def test_select_system_prompt_strategy_1(self):
+        prompt = _select_system_prompt("strategy_1")
+        assert prompt is _AIGC_STRATEGY_1_SYSTEM_PROMPT
+        assert "零幻觉原则" in prompt
+        assert "词汇降温" in prompt
+
+    def test_select_system_prompt_strategy_2_default_layer1(self):
+        prompt = _select_system_prompt("strategy_2")
+        assert prompt is _AIGC_STRATEGY_2_LAYER1_SYSTEM_PROMPT
+        assert "词法级去 AI 化" in prompt
+
+    def test_select_system_prompt_strategy_2_layer2(self):
+        prompt = _select_system_prompt("strategy_2_layer2")
+        assert prompt is _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT
+        assert "句法破序" in prompt
+
+    def test_build_user_prompt_includes_global_context(self):
+        ctx = "【核心论点】：信息茧房\n【所属学科】：传播学\n【行文基调】：批判性分析"
+        prompt = _build_user_prompt(
+            text="测试内容",
+            hint="传播学论文",
+            preserve_terms=[],
+            strong_restructure=False,
+            global_context=ctx,
+        )
+        assert "global_context" in prompt
+        assert "<global_context>" in prompt["global_context"]
+        assert ctx in prompt["global_context"]
+
+    def test_build_user_prompt_without_global_context(self):
+        prompt = _build_user_prompt(
+            text="测试内容",
+            hint="传播学论文",
+            preserve_terms=[],
+            strong_restructure=False,
+        )
+        assert "global_context" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Parallel rewrite and global context injection in pipeline
+# ---------------------------------------------------------------------------
+
+class TestParallelRewriteAndContext:
+    @pytest.fixture()
+    def tmp_multi_para_docx(self, tmp_path):
+        """A DOCX with multiple flaggable paragraphs to verify parallel processing."""
+        texts = [
+            "总而言之，本研究提出了一种全新的框架，值得注意的是性能显著提升。",
+            "综上所述，实验结果充分验证了方法的有效性和优越性，不可避免地改变格局。",
+            "由此产生了协同演进的赋能底层逻辑，前所未有地推动了跨越式发展。",
+        ]
+        doc = Document()
+        for t in texts:
+            doc.add_paragraph(t)
+        path = tmp_path / "multi.docx"
+        buf = io.BytesIO()
+        doc.save(buf)
+        path.write_bytes(buf.getvalue())
+        return path
+
+    @pytest.mark.asyncio
+    async def test_rewrite_mode_parallel_completes(self, tmp_multi_para_docx):
+        """rewrite mode with multiple chunks must complete when processed in parallel."""
+        rewrite_calls: list[str] = []
+
+        async def mock_rewrite(text, topic_hint=None, preserve_terms=None, **kwargs):
+            rewrite_calls.append(text)
+            return text + " [rewritten]"
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = mock_rewrite
+        mock_rewriter._api_key = "fake"
+
+        svc = PipelineService(
+            similarity_detector=HeuristicSimilarityDetector(),
+            aigc_detector=HeuristicAIGCDetector(),
+            rewriter=mock_rewriter,
+        )
+
+        record = await svc.run(
+            tmp_multi_para_docx,
+            mode="rewrite",
+            topic_hint="传播学论文",
+        )
+
+        assert record.status == "done"
+        assert record.result_path is not None
+
+    @pytest.mark.asyncio
+    async def test_global_context_injected_into_report(self, tmp_multi_para_docx, tmp_path):
+        """When compress_context is available, the report should mark global_context_used=True."""
+        async def mock_rewrite(text, topic_hint=None, preserve_terms=None, **kwargs):
+            return text
+
+        async def mock_compress_context(text, model_name=None):
+            return "【核心论点】：信息茧房\n【所属学科】：传播学\n【行文基调】：批判性分析"
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = mock_rewrite
+        mock_rewriter.compress_context = mock_compress_context
+        mock_rewriter._api_key = "fake"
+
+        svc = PipelineService(
+            similarity_detector=HeuristicSimilarityDetector(),
+            aigc_detector=HeuristicAIGCDetector(),
+            rewriter=mock_rewriter,
+        )
+
+        record = await svc.run(
+            tmp_multi_para_docx,
+            mode="rewrite",
+            topic_hint="传播学论文",
+        )
+
+        assert record.status == "done"
+        # Check report contains global_context_used flag
+        import json
+        report = json.loads(record.report_path.read_text(encoding="utf-8"))
+        assert report.get("global_context_used") is True

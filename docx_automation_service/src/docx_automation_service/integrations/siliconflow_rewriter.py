@@ -75,6 +75,86 @@ _SYSTEM_PROMPT = (
     "禁止出现'为了规避AI检测'之类元话语。"
 )
 
+# ---------------------------------------------------------------------------
+# AIGC Reduction Strategy 1 – single comprehensive pass
+# ---------------------------------------------------------------------------
+_AIGC_STRATEGY_1_SYSTEM_PROMPT = (
+    "# Role: 资深学术期刊编辑与文本润色专家\n\n"
+    "# Task:\n"
+    "你现在的任务是对提供的一段学术论文文本进行\u201c去 AI 化\u201d润色。核心目标是消除大语言模型常见的行文特征，"
+    "使其读起来像人类学者亲笔撰写，同时**绝对保持原意、客观事实、逻辑框架不变**。\n\n"
+    "# Strict Constraints (绝对红线，触发即任务失败):\n"
+    "1. 【零幻觉原则】：严禁凭空捏造、增加或修改任何实验数据、百分比、算法名称、文献引用标记（如[1]）、"
+    "具体年份或平台案例。原文没有的数据和事实绝对不可无中生有！\n"
+    "2. 【禁止内容扩写】：你的任务是\u201c润色\u201d而非\u201c扩写\u201d。不要为了增加细节而编造任何原文未提及的论据。\n"
+    "3. 【禁止跨学科乱入】：严格遵守给定的学术语境。如原文是文科理论，严禁在改写中混入软件工程、"
+    "代码测试、硬件性能等理工科术语。\n\n"
+    "# Rhetorical Guidelines (润色策略):\n"
+    "1. 【词汇降温】：\n"
+    "   - 剔除或替换 AI 常用宏大词汇。"
+    "禁用：赋能、底层逻辑、颗粒度、抓手、闭环、潜移默化、跨越式发展、前所未有、协同演进。\n"
+    "   - 替换策略：使用平实、精确的传统学术词汇（如将\u201c底层逻辑\u201d改为\u201c基本机制\u201d；"
+    "\u201c赋能\u201d改为\u201c支持\u201d）。修正翻译腔，如将\u201c善良算法\u201d改为国内通用的\u201c算法向善\u201d。\n"
+    "2. 【句法破序】：\n"
+    "   - 识别大段的排比句和高度对称的列表格式（如\u201c其一...其二...其三...\u201d）。\n"
+    "   - 将机械列表转化为逻辑自然流动的段落，利用段首承接词（如：此外、更深层来看、这种现象进而导致了...）进行过渡。\n"
+    "   - 打破句子长度的均匀性，混合使用长句与短促的总结性短句。\n"
+    "3. 【去中庸化】：\n"
+    "   - 避免使用\u201c既不能...也不能...\u201d、\u201c需要把握...的动态平衡\u201d这类 AI 典型的\u201c端水式\u201d废话结论，"
+    "使语气更具学术探讨的客观冷峻感。\n\n"
+    "# Output Format:\n"
+    "直接输出润色后的文本，不要包含任何解释、问候语或格式前缀。"
+)
+
+# ---------------------------------------------------------------------------
+# AIGC Reduction Strategy 2 – layered approach
+# Layer 1: vocabulary cooldown (safe, default)
+# ---------------------------------------------------------------------------
+_AIGC_STRATEGY_2_LAYER1_SYSTEM_PROMPT = (
+    "# Role: 资深学术期刊文字编辑\n"
+    "# Task: 对给定的学术论文文本进行\u201c词法级去 AI 化\u201d，消除机器生成的词汇特征。\n\n"
+    "# Strict Constraints:\n"
+    "1. 【绝对保真】：严禁修改任何数据、百分比、文献引用标记[X]、专有名词和事实案例。\n"
+    "2. 【禁止改变句法结构】：不要拆分或合并原有句子，绝对保留原有的段落和逻辑结构"
+    "（包括\u201c其一、其二\u201d等列表格式）。\n\n"
+    "# Action:\n"
+    "请扫描全文，将以下典型的大模型高频词汇替换为平实的传统学术表达：\n"
+    "- 禁用词：赋能、底层逻辑、颗粒度、抓手、闭环、潜移默化、跨越式发展、前所未有、协同演进。\n"
+    "- 修正所有生硬的机翻词汇（如将\u201c善良算法\u201d纠正为\u201c算法向善\u201d，"
+    "\u201c技术疏离\u201d纠正为\u201c技术异化\u201d）。\n"
+    "只做词语级的同义替换，使得文本用词不那么\u201c浮夸\u201d和\u201c套路化\u201d。直接输出替换后的文本。"
+)
+
+# ---------------------------------------------------------------------------
+# AIGC Reduction Strategy 2 Layer 2: structural rebuild (optional, user-enabled)
+# ---------------------------------------------------------------------------
+_AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT = (
+    "# Role: 资深学术期刊内容编辑\n"
+    "# Task: 对文本进行\u201c句法破序\u201d重构，打破呆板的机器写作结构。\n\n"
+    "# Strict Constraints:\n"
+    "1. 【零幻觉】：绝对禁止增加原文没有的实验数据、百分比或文献引用！\n"
+    "2. 【保留事实】：不能删除上一轮文本中包含的核心观点和专业术语。\n\n"
+    "# Action:\n"
+    "1. 打破对称：如果原文存在生硬的列表格式（如\u201c一方面...另一方面...\u201d、\u201c其一...其二...\u201d），"
+    "请将其融合成一个自然连贯的长段落。\n"
+    "2. 错落重组：将匀速的、长度相似的长句，改写为\u201c长从句 + 短促的总结句\u201d的混合体。"
+    "使用\u201c更深层来看\u201d、\u201c这导致了\u201d、\u201c此外\u201d等关联词让逻辑自然流动。\n"
+    "3. 消除说教：删除形如\u201c既不能...也不能...\u201d的端水式废话，保留直接客观的陈述。\n"
+    "直接输出重组后的文本。"
+)
+
+# ---------------------------------------------------------------------------
+# Context compression prompt
+# ---------------------------------------------------------------------------
+_CONTEXT_COMPRESSION_SYSTEM_PROMPT = (
+    "你是学术论文分析助手。请阅读给定文本，用一段简短的话（不超过100字）提炼出以下三个要素，"
+    "格式固定：\n"
+    "【核心论点】：…\n"
+    "【所属学科】：…\n"
+    "【行文基调】：…\n"
+    "只输出这三行，不加其他内容。"
+)
+
 
 class SiliconFlowRewriter(Rewriter):
     """LLM-based academic text rewriter using the SiliconFlow API.
@@ -89,6 +169,43 @@ class SiliconFlowRewriter(Rewriter):
         self._api_key = settings.siliconflow_api_key
         self._model = settings.siliconflow_model
 
+    async def compress_context(
+        self,
+        text: str,
+        model_name: str | None = None,
+    ) -> str | None:
+        """Summarise the document skeleton into a minimal global context string.
+
+        Returns ``None`` when the API is unavailable or the call fails.
+        """
+        if not self._api_key:
+            return None
+
+        selected_model = (model_name or self._model).strip() or self._model
+        payload = {
+            "model": selected_model,
+            "temperature": 0.3,
+            "max_tokens": 200,
+            "messages": [
+                {"role": "system", "content": _CONTEXT_COMPRESSION_SYSTEM_PROMPT},
+                {"role": "user", "content": text[:2000]},
+            ],
+        }
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        timeout = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+        data = await self._request_completion(payload, headers, timeout, text_len=len(text))
+        if data is None:
+            return None
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        message = choices[0].get("message", {}) or {}
+        result = _extract_message_text(message).strip()
+        return result or None
+
     async def rewrite(
         self,
         text: str,
@@ -96,6 +213,9 @@ class SiliconFlowRewriter(Rewriter):
         preserve_terms: list[str] | None = None,
         model_name: str | None = None,
         enable_reasoning: bool = True,
+        global_context: str | None = None,
+        aigc_reduction_strategy: str | None = None,
+        enable_structural_rebuild: bool = False,
     ) -> str:
         if not self._api_key:
             return text
@@ -104,11 +224,15 @@ class SiliconFlowRewriter(Rewriter):
         hint = topic_hint or "学术论文"
         selected_model = (model_name or self._model).strip() or self._model
 
+        # Select system prompt based on strategy
+        system_prompt = _select_system_prompt(aigc_reduction_strategy)
+
         user_prompt = _build_user_prompt(
             text=text,
             hint=hint,
             preserve_terms=preserve_terms,
             strong_restructure=False,
+            global_context=global_context,
         )
 
         if not enable_reasoning:
@@ -120,7 +244,7 @@ class SiliconFlowRewriter(Rewriter):
             "model": selected_model,
             "temperature": 0.68 if enable_reasoning else 0.52,
             "messages": [
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(user_prompt, ensure_ascii=False)},
             ],
         }
@@ -162,12 +286,13 @@ class SiliconFlowRewriter(Rewriter):
                     hint=hint,
                     preserve_terms=preserve_terms,
                     strong_restructure=True,
+                    global_context=global_context,
                 )
                 stronger_payload = {
                     "model": selected_model,
                     "temperature": 0.62 if enable_reasoning else 0.48,
                     "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": json.dumps(stronger_prompt, ensure_ascii=False)},
                     ],
                 }
@@ -188,7 +313,55 @@ class SiliconFlowRewriter(Rewriter):
                 found_blacklist,
             )
 
+        # Strategy 2 layer 2: structural rebuild (user-enabled, runs on L1 output)
+        if aigc_reduction_strategy == "strategy_2" and enable_structural_rebuild:
+            result = await self._run_strategy2_layer2(
+                result,
+                selected_model=selected_model,
+                headers=headers,
+                timeout=timeout,
+                global_context=global_context,
+            )
+
         return result
+
+    async def _run_strategy2_layer2(
+        self,
+        text: str,
+        *,
+        selected_model: str,
+        headers: dict,
+        timeout: httpx.Timeout,
+        global_context: str | None,
+    ) -> str:
+        """Run Strategy 2 Layer 2 (structural rebuild) on the Layer 1 output."""
+        user_prompt = _build_user_prompt(
+            text=text,
+            hint="学术论文",
+            preserve_terms=[],
+            strong_restructure=False,
+            global_context=global_context,
+        )
+        payload = {
+            "model": selected_model,
+            "temperature": 0.65,
+            "messages": [
+                {"role": "system", "content": _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(user_prompt, ensure_ascii=False)},
+            ],
+        }
+        data = await self._request_completion(payload, headers, timeout, text_len=len(text))
+        if data is None:
+            return text
+        choices = data.get("choices") or []
+        if not choices:
+            return text
+        message = choices[0].get("message", {}) or {}
+        layer2_result = _extract_message_text(message).strip()
+        if layer2_result:
+            logger.debug("strategy_2 layer2 structural rebuild done | len=%s→%s", len(text), len(layer2_result))
+            return layer2_result
+        return text
 
     async def _request_completion(
         self,
@@ -255,6 +428,17 @@ class SiliconFlowRewriter(Rewriter):
                     return None
 
 
+def _select_system_prompt(aigc_reduction_strategy: str | None) -> str:
+    """Return the appropriate system prompt for the given strategy."""
+    if aigc_reduction_strategy == "strategy_1":
+        return _AIGC_STRATEGY_1_SYSTEM_PROMPT
+    if aigc_reduction_strategy == "strategy_2_layer2":
+        return _AIGC_STRATEGY_2_LAYER2_SYSTEM_PROMPT
+    if aigc_reduction_strategy == "strategy_2":
+        return _AIGC_STRATEGY_2_LAYER1_SYSTEM_PROMPT
+    return _SYSTEM_PROMPT
+
+
 def _extract_message_text(message: dict) -> str:
     """Extract final assistant text while intentionally ignoring reasoning fields."""
     content = message.get("content", "")
@@ -284,6 +468,7 @@ def _build_user_prompt(
     hint: str,
     preserve_terms: list[str],
     strong_restructure: bool,
+    global_context: str | None = None,
 ) -> dict:
     constraints = [
         "【核心论意】保留核心论点100%，数据准确，引文标记（[1]、(Doe, 2024)、【文献01】）绝不改动。",
@@ -308,13 +493,18 @@ def _build_user_prompt(
             "【强制重构】在不改变事实的前提下，必须重排句序和段内逻辑，避免沿用原文骨架。"
         )
 
-    return {
+    prompt = {
         "task": "academic_deep_restructure",
         "topic": hint,
         "preserve_terms": preserve_terms,
         "input_text": text,
         "constraints": constraints,
     }
+
+    if global_context:
+        prompt["global_context"] = f"<global_context>\n{global_context}\n</global_context>"
+
+    return prompt
 
 
 def _normalized_change_ratio(original: str, rewritten: str) -> float:
