@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "type": "abstract",
+  "description": "摘要生成 Prompt",
+  "model_hint": "NotebookLM 或任意支持长上下文的学术写作模型",
+  "instructions": [
+    "1. 先完成所有正文块并导入",
+    "2. 获取摘要 Prompt",
+    "3. 将 Prompt 提交给模型生成 JSON",
+    "4. 把 JSON 导入摘要接口"
+  ],
+  "template": "你是学术摘要生成助手。请先理解并压缩正文语义，再输出严格 JSON，不要输出 Markdown 代码块。"
+}

@@ -28,7 +28,17 @@
         <form id="run-form">
           <label>
             选择 DOCX 文件
-            <input id="file" name="file" type="file" accept=".docx" required />
+            <input id="file" name="file" type="file" accept=".docx" />
+          </label>
+
+          <label>
+            或直接粘贴文本（可选）
+            <textarea
+              id="raw_text"
+              name="raw_text"
+              rows="8"
+              placeholder="可直接粘贴需要降重的正文；与 DOCX 二选一即可"
+            ></textarea>
           </label>
 
           <div class="grid-2">
@@ -36,6 +46,7 @@
               模式
               <select id="mode" name="mode">
                 <option value="rewrite" selected>rewrite（检测+改写）</option>
+                <option value="deep_rewrite">deep_rewrite（三层处理）</option>
                 <option value="analyze">analyze（仅检测）</option>
               </select>
             </label>
@@ -56,6 +67,18 @@
             />
           </label>
 
+          <div class="grid-2">
+            <label>
+              模型名称（可快速切换）
+              <input id="model_name" name="model_name" type="text" placeholder="留空则使用默认模型" />
+            </label>
+
+            <label class="toggle-row">
+              <input id="enable_reasoning" name="enable_reasoning" type="checkbox" />
+              <span>开启模型推理</span>
+            </label>
+          </div>
+
           <button id="submit-btn" type="submit">提交任务</button>
         </form>
       </section>
@@ -63,10 +86,21 @@
       <section class="panel result-panel">
         <h2>2. 结果</h2>
         <div id="status" class="status">等待提交任务</div>
+        <div class="progress-wrap">
+          <div class="progress-labels">
+            <span id="stage">阶段：等待中</span>
+            <span id="progress-text">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <div id="progress-detail" class="progress-detail">段落：0 / 0，预计剩余：--</div>
+        </div>
         <pre id="output" class="output"></pre>
         <div class="actions">
           <button id="report-btn" disabled>查看报告</button>
           <button id="download-btn" disabled>下载结果 DOCX</button>
+          <button id="cancel-btn" disabled>中断本次任务</button>
         </div>
       </section>
     </main>

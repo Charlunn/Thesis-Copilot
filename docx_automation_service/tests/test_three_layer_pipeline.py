@@ -16,6 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pydantic import ValidationError
+
 # ---------------------------------------------------------------------------
 # Layer 1 – Back-Translation
 # ---------------------------------------------------------------------------
@@ -49,11 +51,13 @@ class TestBackTranslationService:
         assert results == texts
 
     @patch("docx_automation_service.integrations.back_translation.settings")
-    def test_back_translate_calls_deepl_api(self, mock_settings):
-        """When a key is configured, the service must call the DeepL API for each hop."""
-        mock_settings.deepl_api_key = "fake-key"
-        mock_settings.deepl_base_url = "https://api-free.deepl.com/v2"
+    def test_back_translate_calls_azure_translator_api(self, mock_settings):
+        """When a key is configured, the service must call Azure Translator for each hop."""
+        mock_settings.azure_translator_key = "fake-key"
+        mock_settings.azure_translator_endpoint = "https://api.cognitive.microsofttranslator.com"
+        mock_settings.azure_translator_region = "eastasia"
         mock_settings.translation_chain = "zh-de-en-zh"
+        mock_settings.translation_source_lang = "zh-Hans"
 
         svc = BackTranslationService()
         assert svc.is_available()
@@ -65,15 +69,17 @@ class TestBackTranslationService:
         with patch.object(svc, "_translate", side_effect=fake_translate):
             result = asyncio.run(svc.back_translate("原始文本"))
 
-        # zh→de→en→zh: three hops
-        assert result == "[EN-US→ZH]"
+        # zh-Hans→de→en→zh-Hans: three hops
+        assert result == "[en→zh-Hans]"
 
     @patch("docx_automation_service.integrations.back_translation.settings")
     def test_back_translate_falls_back_on_api_error(self, mock_settings):
         """A failing API call must fall back to the original text without raising."""
-        mock_settings.deepl_api_key = "fake-key"
-        mock_settings.deepl_base_url = "https://api-free.deepl.com/v2"
+        mock_settings.azure_translator_key = "fake-key"
+        mock_settings.azure_translator_endpoint = "https://api.cognitive.microsofttranslator.com"
+        mock_settings.azure_translator_region = "eastasia"
         mock_settings.translation_chain = "zh-de-en-zh"
+        mock_settings.translation_source_lang = "zh-Hans"
 
         svc = BackTranslationService()
 
@@ -171,6 +177,8 @@ from docx_automation_service.integrations.siliconflow_rewriter import (
     BLACKLIST_TERMS,
     SiliconFlowRewriter,
     _SYSTEM_PROMPT,
+    _build_user_prompt,
+    _normalized_change_ratio,
 )
 
 
@@ -183,8 +191,30 @@ class TestSiliconFlowRewriter:
     def test_system_prompt_contains_four_pillars(self):
         assert "打破均衡句式" in _SYSTEM_PROMPT
         assert "引入学科术语变体" in _SYSTEM_PROMPT
-        assert "模拟人类写作不完美性" in _SYSTEM_PROMPT
+        assert "模拟工程真实约束" in _SYSTEM_PROMPT
         assert "黑名单词汇剔除" in _SYSTEM_PROMPT
+
+    def test_system_prompt_avoids_colloquial_style(self):
+        assert "不写口语" in _SYSTEM_PROMPT
+        assert "禁止出现'为了规避AI检测'" in _SYSTEM_PROMPT
+
+    def test_prompt_contains_anti_template_constraints(self):
+        prompt = _build_user_prompt(
+            text="测试内容",
+            hint="学术论文",
+            preserve_terms=[],
+            strong_restructure=False,
+        )
+        joined = "\n".join(prompt["constraints"])
+        assert "其一/其二/其三" in joined
+        assert "目的/方法/结论/对策" in joined
+        assert "不得新增具体实验数据" in joined
+
+    def test_normalized_change_ratio_detects_similarity(self):
+        r1 = _normalized_change_ratio("这是测试文本", "这是测试文本")
+        r2 = _normalized_change_ratio("这是测试文本", "该段文字已改写")
+        assert r1 < 0.05
+        assert r2 > r1
 
     def test_rewrite_returns_original_when_no_api_key(self):
         rewriter = SiliconFlowRewriter()
@@ -206,6 +236,41 @@ from docx_automation_service.integrations.mock_detectors import (
     HeuristicSimilarityDetector,
 )
 from docx_automation_service.services.pipeline import PipelineService, _merge_layer_report
+
+
+def test_settings_validation_rejects_region_without_key(monkeypatch):
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_KEY", "")
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_REGION", "eastasia")
+
+    from docx_automation_service.core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_settings_validation_rejects_missing_region_when_required(monkeypatch):
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_KEY", "fake-key")
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_REGION", "")
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_REQUIRE_REGION", "true")
+
+    from docx_automation_service.core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_settings_validation_allows_missing_region_when_not_required(monkeypatch):
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_KEY", "fake-key")
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_REGION", "")
+    monkeypatch.setenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_REQUIRE_REGION", "false")
+
+    from docx_automation_service.core.config import Settings
+
+    cfg = Settings()
+    assert cfg.azure_translator_key == "fake-key"
+    assert cfg.azure_translator_region == ""
+
+    monkeypatch.delenv("DOCX_AUTOMATION_AZURE_TRANSLATOR_REQUIRE_REGION", raising=False)
 
 
 def _make_docx_bytes(text: str) -> bytes:

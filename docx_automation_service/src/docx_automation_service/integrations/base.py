@@ -17,5 +17,7 @@ class Rewriter(Protocol):
         text: str,
         topic_hint: str | None = None,
         preserve_terms: list[str] | None = None,
+        model_name: str | None = None,
+        enable_reasoning: bool = True,
     ) -> str:
         ...

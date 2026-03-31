@@ -104,6 +104,7 @@ label {
 }
 
 input,
+textarea,
 select,
 button {
   width: 100%;
@@ -114,9 +115,15 @@ button {
 }
 
 input,
+textarea,
 select {
   background: #fff;
   padding: 11px 12px;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 120px;
 }
 
 button {
@@ -165,15 +172,66 @@ button:disabled {
   font-size: 12px;
 }
 
+.progress-wrap {
+  margin-bottom: 12px;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(19, 32, 24, 0.12);
+  overflow: hidden;
+}
+
+.progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(120deg, var(--accent), #185d42);
+  transition: width 260ms ease;
+}
+
+.progress-detail {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 6px;
+}
+
 .actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   margin-top: 12px;
 }
 
 .actions button:nth-child(2) {
   background: linear-gradient(120deg, var(--accent-2), #a2471f);
+}
+
+.actions button:nth-child(3) {
+  background: linear-gradient(120deg, #a44343, #7c2f2f);
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 0;
 }
 
 @media (max-width: 768px) {

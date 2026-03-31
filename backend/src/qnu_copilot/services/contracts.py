@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from qnu_copilot.domain.contracts import (
+    AbstractContract,
     BlockContentContract,
     ChunkPlanContract,
     CompressedContextContract,
@@ -24,6 +25,7 @@ CONTRACT_MODEL_MAP: dict[ContractType, type[BaseModel]] = {
     ContractType.CHUNK_PLAN: ChunkPlanContract,
     ContractType.BLOCK_CONTENT: BlockContentContract,
     ContractType.COMPRESSED_CONTEXT: CompressedContextContract,
+    ContractType.ABSTRACT: AbstractContract,
 }
 
 

@@ -203,6 +203,10 @@ class CompressedContextImportRequest(BaseModel):
     raw_text: str
 
 
+class AbstractImportRequest(BaseModel):
+    raw_text: str
+
+
 class ExportProjectRequest(BaseModel):
     output_filename: str | None = None
 

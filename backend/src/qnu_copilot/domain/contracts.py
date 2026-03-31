@@ -246,5 +246,32 @@ class CompressedContextContract(BaseModel):
         return self
 
 
+class AbstractContract(BaseModel):
+    title: str = "摘要"
+    content: list[str] = Field(min_length=1)
+    keywords: list[str] = Field(default_factory=list)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("title must not be empty")
+        return normalized
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value if item.strip()]
+        if not normalized:
+            raise ValueError("content must contain at least one non-empty paragraph")
+        return normalized
+
+    @field_validator("keywords")
+    @classmethod
+    def normalize_keywords(cls, value: list[str]) -> list[str]:
+        return [item.strip() for item in value if item.strip()]
+
+
 OutlineNodeContract.model_rebuild()
 ConfirmedOutlineNodeContract.model_rebuild()

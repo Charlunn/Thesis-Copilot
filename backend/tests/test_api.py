@@ -110,6 +110,20 @@ def build_compressed_context_payload() -> str:
     )
 
 
+def build_abstract_payload() -> str:
+    return json.dumps(
+        {
+            "title": "摘要",
+            "content": [
+                "本文面向论文生成流程构建了分阶段工作流，并在约束条件下完成正文组织与上下文衔接。",
+                "实验过程显示，该流程能够提升内容连贯性和可导出质量，具有较好的工程可落地性。",
+            ],
+            "keywords": ["论文生成", "上下文压缩", "摘要"],
+        },
+        ensure_ascii=False,
+    )
+
+
 def build_manual_bibtex_payload() -> str:
     return """
 @article{manual1,
@@ -294,6 +308,13 @@ def test_contract_parse_route_supports_all_contracts(client: TestClient) -> None
                 },
             }
         ),
+        "abstract": json.dumps(
+            {
+                "title": "摘要",
+                "content": ["段落一", "段落二"],
+                "keywords": ["关键词A", "关键词B"],
+            }
+        ),
     }
 
     for contract_type, raw_text in payloads.items():
@@ -399,6 +420,19 @@ def test_chunk_plan_prompt_and_generation_routes(client: TestClient, tmp_path: P
     assert compress_import.status_code == 200
     assert compress_import.json()["state"]["generation"]["current_block_index"] == 2
 
+    client.post(
+        f"/projects/{project_id}/blocks/2/import",
+        json={"raw_text": build_block_payload(2, "方法与结论")},
+    )
+    abstract_prompt = client.get(f"/projects/{project_id}/prompts/abstract")
+    assert abstract_prompt.status_code == 200
+    abstract_import = client.post(
+        f"/projects/{project_id}/abstract/import",
+        json={"raw_text": build_abstract_payload()},
+    )
+    assert abstract_import.status_code == 200
+    assert abstract_import.json()["workflow_stage"] == "export"
+
 
 def test_manual_bibtex_import_route_updates_state(client: TestClient) -> None:
     created = create_project(client, need_reference_recommendation=False)
@@ -458,6 +492,10 @@ def test_export_docx_route_generates_output_and_updates_state(
     client.post(
         f"/projects/{project_id}/blocks/2/import",
         json={"raw_text": build_block_payload(2, "方法与结论")},
+    )
+    client.post(
+        f"/projects/{project_id}/abstract/import",
+        json={"raw_text": build_abstract_payload()},
     )
 
     response = client.post(

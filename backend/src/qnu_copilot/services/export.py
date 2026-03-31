@@ -381,6 +381,9 @@ class ProjectExportService:
             for block in sorted(state.generation.blocks, key=lambda item: item.block_index)
             if block.normalized_json is not None
         ]
+        abstract_block = self._build_abstract_block(state)
+        if abstract_block is not None:
+            final_blocks = [abstract_block, *final_blocks]
         citation_mapping = self._build_citation_mapping(state)
 
         # Perform validation before export
@@ -464,6 +467,8 @@ class ProjectExportService:
             raise ConflictError("generated blocks are required before export")
         if any(block.normalized_json is None for block in state.generation.blocks):
             raise ConflictError("all block contents must be imported before export")
+        if state.generation.abstract_json is None:
+            raise ConflictError("abstract must be imported before export")
 
     def _build_citation_mapping(self, state: ProjectState) -> dict[str, int]:
         mapping: dict[str, int] = {}
@@ -476,3 +481,21 @@ class ProjectExportService:
         assets_root = Path(__file__).resolve().parents[3] / "assets" / "templates"
         template_path = assets_root / f"{template_id}.docx"
         return template_path if template_path.exists() else None
+
+    def _build_abstract_block(self, state: ProjectState) -> dict[str, Any] | None:
+        abstract_json = state.generation.abstract_json
+        if not abstract_json:
+            return None
+        content: list[dict[str, Any]] = [{"type": "h1", "text": abstract_json.get("title", "摘要")}]
+        for paragraph in abstract_json.get("content", []):
+            text = str(paragraph).strip()
+            if text:
+                content.append({"type": "p", "text": text})
+        keywords = [item.strip() for item in abstract_json.get("keywords", []) if str(item).strip()]
+        if keywords:
+            content.append({"type": "p", "text": f"关键词：{'；'.join(keywords)}"})
+        return {
+            "block_index": 0,
+            "block_title": abstract_json.get("title", "摘要"),
+            "content": content,
+        }

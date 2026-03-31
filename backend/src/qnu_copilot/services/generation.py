@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qnu_copilot.domain.contracts import BlockContentContract, CompressedContextContract
+from qnu_copilot.domain.contracts import AbstractContract, BlockContentContract, CompressedContextContract
 from qnu_copilot.domain.enums import ContractType, GenericStatus, WorkflowStage
 from qnu_copilot.services.contracts import ContractParserService, ParsedContract
 from qnu_copilot.services.errors import ConflictError
@@ -31,6 +31,8 @@ class GenerationService:
         block_state = self._get_generation_block(state.generation.blocks, block_index)
         if block_state.normalized_json is not None:
             raise ConflictError("block content was already imported")
+        if block_index == state.generation.total_blocks and state.generation.abstract_json is not None:
+            raise ConflictError("abstract already exists; body blocks cannot be re-imported")
 
         parsed = self.contract_parser.parse(
             ContractType.BLOCK_CONTENT,
@@ -48,7 +50,9 @@ class GenerationService:
 
         if block_index == state.generation.total_blocks:
             state.generation.current_block_index = block_index
-            state.generation.status = GenericStatus.COMPLETED
+            state.generation.status = GenericStatus.IN_PROGRESS
+            state.generation.abstract_status = GenericStatus.READY
+            state.workflow_stage = WorkflowStage.ABSTRACT_GENERATION
         self.workspace_manager.save_state(project_id, state)
         return parsed
 
@@ -87,6 +91,29 @@ class GenerationService:
         state.generation.latest_compressed_context = contract.model_dump(mode="json")
         state.generation.current_block_index = block_index + 1
         state.workflow_stage = WorkflowStage.BLOCK_GENERATION
+        self.workspace_manager.save_state(project_id, state)
+        return parsed
+
+    def import_abstract(self, project_id: str, raw_text: str) -> ParsedContract:
+        state = self.workspace_manager.load_state(project_id)
+        if not state.chunk_plan.confirmed_plan:
+            raise ConflictError("confirmed chunk plan is required before importing abstract")
+        if any(block.normalized_json is None for block in state.generation.blocks):
+            raise ConflictError("all body blocks must be imported before abstract")
+        if state.generation.abstract_json is not None:
+            raise ConflictError("abstract was already imported")
+
+        parsed = self.contract_parser.parse(
+            ContractType.ABSTRACT,
+            raw_text,
+            project_id=project_id,
+        )
+        contract = AbstractContract.model_validate(parsed.parsed_object)
+        state.generation.abstract_raw_ai_text = raw_text
+        state.generation.abstract_json = contract.model_dump(mode="json")
+        state.generation.abstract_status = GenericStatus.COMPLETED
+        state.generation.status = GenericStatus.COMPLETED
+        state.workflow_stage = WorkflowStage.EXPORT
         self.workspace_manager.save_state(project_id, state)
         return parsed
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,7 @@ class PromptFactoryService:
             "3. language 只能使用 zh 或 en。\n"
             "4. download_url 尽量提供可以实际访问的 PDF 或论文落地页链接。\n"
             "5. 不要解释，不要附加说明，只返回 JSON。\n\n"
+            "补充约束：impact_note 要具体、克制，避免空泛套话。\n\n"
             "输出 JSON 结构必须为：\n"
             '{\n'
             '  "topic": "论文主题",\n'
@@ -72,6 +74,7 @@ class PromptFactoryService:
         prompt_text = (
             "你是 NotebookLM 中的论文提纲生成助手。请基于用户已经上传到 NotebookLM 的 PDF，"
             "为当前论文生成严格 JSON，不要输出 Markdown 代码块。\n\n"
+            f"{self._natural_style_constraints()}\n\n"
             f"论文题目：{state.project.title}\n"
             f"核心思想：{state.project.core_idea}\n"
             f"最低总字数：{state.project.minimum_total_words or '未设置'}\n"
@@ -117,6 +120,7 @@ class PromptFactoryService:
 
         prompt_text = (
             "你是论文切块规划助手。请根据以下项目信息，输出严格 JSON，不要输出 Markdown 代码块。\n\n"
+            f"{self._natural_style_constraints()}\n\n"
             f"论文题目：{state.project.title}\n"
             f"核心思想：{state.project.core_idea}\n"
             f"最低总字数：{state.project.minimum_total_words or '未设置'}\n\n"
@@ -163,6 +167,7 @@ class PromptFactoryService:
 
         prompt_text = (
             "你是 NotebookLM 中的学术正文生成助手。请基于已上传 PDF 来源，为当前论文块生成严格 JSON，不要输出 Markdown 代码块。\n\n"
+            f"{self._natural_style_constraints()}\n\n"
             f"论文题目：{state.project.title}\n"
             f"核心思想：{state.project.core_idea}\n"
             f"当前块编号：{block_plan['block_index']}\n"
@@ -221,6 +226,7 @@ class PromptFactoryService:
 
         prompt_text = (
             "你是论文上下文压缩助手。请把当前已生成的论文块压缩为严格 JSON，不要输出 Markdown 代码块。\n\n"
+            f"{self._natural_style_constraints()}\n\n"
             f"已完成块截止：第 {block_index} 块\n"
             "已完成块内容：\n"
             f"{json.dumps(imported_blocks, ensure_ascii=False, indent=2)}\n\n"
@@ -240,6 +246,38 @@ class PromptFactoryService:
         )
         return prompt_text, snapshot
 
+    def render_abstract_prompt(self, project_id: str) -> tuple[str, Path]:
+        state = self.workspace_manager.load_state(project_id)
+        if not state.chunk_plan.confirmed_plan:
+            raise ConflictError("confirmed chunk plan is required before rendering abstract prompt")
+        if not state.generation.blocks:
+            raise ConflictError("generated blocks are required before rendering abstract prompt")
+        if any(block.normalized_json is None for block in state.generation.blocks):
+            raise ConflictError("all body blocks must be imported before rendering abstract prompt")
+
+        compressed_body = self._build_final_body_context(state.generation.blocks)
+        prompt_text = (
+            "你是学术摘要生成助手。请先理解并压缩正文语义，再输出严格 JSON，不要输出 Markdown 代码块。\n\n"
+            f"{self._natural_style_constraints()}\n\n"
+            f"论文题目：{state.project.title}\n"
+            f"核心思想：{state.project.core_idea}\n"
+            "正文压缩上下文（由系统从完整正文生成）：\n"
+            f"{json.dumps(compressed_body, ensure_ascii=False, indent=2)}\n\n"
+            "请输出 JSON，结构必须为：\n"
+            '{\n  "title": "摘要",\n  "content": ["摘要段落1", "摘要段落2"],\n  "keywords": ["关键词1", "关键词2", "关键词3"]\n}\n\n'
+            "要求：\n"
+            "1. 摘要应覆盖研究背景、方法、结果与结论，不得与正文机械重复。\n"
+            "2. content 至少 2 段，每段 120-220 字，中文学术表达自然流畅。\n"
+            "3. keywords 建议 3-5 个，避免空泛词汇。\n"
+            "4. 只输出 JSON，不要附加解释。"
+        )
+        snapshot = self.workspace_manager.write_prompt_snapshot(
+            project_id,
+            prompt_name="abstract_prompt",
+            prompt_text=prompt_text,
+        )
+        return prompt_text, snapshot
+
     def _get_block_plan(self, confirmed_plan: dict[str, Any], block_index: int) -> dict[str, Any]:
         for block in confirmed_plan["blocks"]:
             if block["block_index"] == block_index:
@@ -251,3 +289,39 @@ class PromptFactoryService:
             if block.block_index == block_index:
                 return block
         raise NotFoundError(f"generation block does not exist: {block_index}")
+
+    def _natural_style_constraints(self) -> str:
+        return (
+            "写作风格约束：避免模板化句式与堆砌连接词；句长应有自然变化；"
+            "优先使用具体论证与可核查表述；必要时用审慎措辞表达边界条件；"
+            "保持学术严谨但不生硬。"
+        )
+
+    def _build_final_body_context(self, blocks: list[Any]) -> dict[str, Any]:
+        section_titles: list[str] = []
+        key_points: list[str] = []
+        citations: list[str] = []
+        citation_re = re.compile(r"【文献\s*0*(\d+)】")
+
+        for block in sorted(blocks, key=lambda item: item.block_index):
+            normalized_json = block.normalized_json or {}
+            block_title = normalized_json.get("block_title") or block.block_title
+            section_titles.append(str(block_title))
+            for element in normalized_json.get("content", []):
+                text = (element.get("text") or "").strip()
+                if not text:
+                    continue
+                if len(key_points) < 10:
+                    key_points.append(text[:160])
+                for match in citation_re.findall(text):
+                    token = f"文献{str(int(match)).zfill(2)}"
+                    if token not in citations:
+                        citations.append(token)
+
+        return {
+            "covered_blocks": [block.block_index for block in sorted(blocks, key=lambda item: item.block_index)],
+            "section_titles": section_titles,
+            "key_points": key_points,
+            "used_citations": citations,
+            "summary_instruction": "请基于以上压缩信息生成摘要，不要逐句复写正文。",
+        }

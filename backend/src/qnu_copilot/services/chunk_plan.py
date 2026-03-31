@@ -93,6 +93,9 @@ class ChunkPlanService:
             for block in contract.blocks
         ]
         state.generation.latest_compressed_context = None
+        state.generation.abstract_raw_ai_text = ""
+        state.generation.abstract_json = None
+        state.generation.abstract_status = GenericStatus.PENDING
         state.generation.status = (
             GenericStatus.READY if contract.total_blocks else GenericStatus.PENDING
         )

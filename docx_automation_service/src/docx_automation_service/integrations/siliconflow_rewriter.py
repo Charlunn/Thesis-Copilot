@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 
 import httpx
 
@@ -54,24 +55,24 @@ BLACKLIST_TERMS: dict[str, str] = {
 # Inspired by gpt_academic reduce_aigc.py four-pillar strategy
 # ---------------------------------------------------------------------------
 _SYSTEM_PROMPT = (
-    "你扮演一位有10年工程与研究经验的资深工科博士。"
-    "你的改写目标是让文本读起来像真实人类研究者的思考，而非流水线生产的机器文本。\n\n"
+    "你是一名软件工程本科毕业论文的写作助手。"
+    "只允许输出严肃、客观、平实、技术化的学术文本，不写口语，不写自媒体语气。\n\n"
     "【四大核心策略】\n"
     "1. 【打破均衡句式】"
-    "主动句、被动句、长句、短句必须交替出现。"
-    "每写3个长句后，必须跟一个极短的句子（7字以内），形成节奏突变。\n"
+    "句长与句法结构要自然错落，但不得刻意制造口语短句。"
+    "禁止模板化排比，如'不仅...更...'、'一方面...另一方面...'。\n"
     "2. 【引入学科术语变体】"
-    "不总是使用最标准的学术词汇，而是使用该学科真实论文中出现的近义词、"
-    "俗称或简称，体现研究者的真实语言习惯。\n"
-    "3. 【模拟人类写作不完美性】"
-    "段落长度自然变化（有长有短），暴露设计中的约束、失败的尝试、成本的取舍。"
-    "偶尔使用口语化连接词：'所以'、'不过'、'其实'、'当然'。\n"
+    "术语可做有限同义替换，但保持专业准确，优先使用论文常见规范表达。"
+    "不得把学术术语降级为网络口语。\n"
+    "3. 【模拟工程真实约束】"
+    "优先呈现工程阻力与权衡：资源限制、接口异常、参数妥协、误报漏报、性能与成本平衡。"
+    "叙述必须具体，避免'完美解决'式线性叙事。\n"
     "4. 【黑名单词汇剔除】"
-    "完全删除高频AI词：总而言之→总结，值得注意的是→需要注意，不可避免地→必然，"
-    "由此产生→导致，神经符号→符号，架构范式→系统方案，代偿→弥补，"
-    "坍塌→失效，维度→方面，综上所述→总结来看。\n\n"
+    "删除高频AI腔词并替换为朴素技术表达，避免宏大叙事和夸张修辞。\n\n"
     "保留所有引文标记【文献XX】[1] (Author, Year)、数学符号、代码片段、变量名。"
     "绝不编造事实、数据或引用。"
+    "禁止输出思考过程、策略分点、推理草稿、用户需求复述。"
+    "禁止出现'为了规避AI检测'之类元话语。"
 )
 
 
@@ -93,42 +94,31 @@ class SiliconFlowRewriter(Rewriter):
         text: str,
         topic_hint: str | None = None,
         preserve_terms: list[str] | None = None,
+        model_name: str | None = None,
+        enable_reasoning: bool = True,
     ) -> str:
         if not self._api_key:
             return text
 
         preserve_terms = preserve_terms or []
         hint = topic_hint or "学术论文"
+        selected_model = (model_name or self._model).strip() or self._model
 
-        user_prompt = {
-            "task": "academic_deep_restructure",
-            "topic": hint,
-            "preserve_terms": preserve_terms,
-            "input_text": text,
-            "constraints": [
-                "【核心论意】保留核心论点100%，数据准确，"
-                "引文标记（[1]、(Doe, 2024)、【文献01】）绝不改动。",
-                "【结构突变】强制长短句交替：复杂逻辑（长句）后必跟7字以内短句。"
-                "示例：'这是关键限制。'或'系统必须拒绝。'",
-                "【学科术语变体】不总用最标准形式，引入该领域真实论文中的近义词/简称/俗称。",
-                "【工程细节与不确定性】每个关键概念加入工程现实：'虽然理想情况是X，"
-                "但受制于成本/算力/时间，我们采用了Y'，或描述一次失败尝试及改进原因。",
-                "【段落多样性】段落长度要有自然变化：有的段落只有2句话，有的有5-6句。",
-                "【口语化连接词】用'所以'、'不过'、'其实'、'当然'替代'因此'、'然而'、'显然'。",
-                "【代码保留】涉及JSON、SQL、正则、配置的内容：不删除、不模糊。",
-                "【词汇控制】单句最多3个专业术语，其余用平实语言解释。",
-                "【黑名单剔除】完全删除AI高频词并替换：" + "、".join(
-                    f"{k}→{v}" for k, v in BLACKLIST_TERMS.items()
-                ),
-                "【排比禁用】不用排比对仗和宏大叙事。"
-                "改用技术文档风格：主谓宾清晰，段落逻辑递进，句式多样。",
-                "【输出格式】仅返回改写文本，无前缀、无解释、无标记。",
-            ],
-        }
+        user_prompt = _build_user_prompt(
+            text=text,
+            hint=hint,
+            preserve_terms=preserve_terms,
+            strong_restructure=False,
+        )
+
+        if not enable_reasoning:
+            user_prompt["constraints"].append(
+                "【推理模式】关闭。直接输出最终改写结果，不要输出推理过程或步骤说明。"
+            )
 
         payload = {
-            "model": self._model,
-            "temperature": 0.72,
+            "model": selected_model,
+            "temperature": 0.68 if enable_reasoning else 0.52,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": json.dumps(user_prompt, ensure_ascii=False)},
@@ -147,9 +137,69 @@ class SiliconFlowRewriter(Rewriter):
             pool=30.0,
         )
 
+        data = await self._request_completion(payload, headers, timeout, text_len=len(text))
+        if data is None:
+            return text
+
+        choices = data.get("choices") or []
+        if not choices:
+            return text
+
+        message = choices[0].get("message", {}) or {}
+        content = _extract_message_text(message)
+        result = content.strip() or text
+
+        if settings.rewrite_retry_on_low_change and len(text) >= 140:
+            change_ratio = _normalized_change_ratio(text, result)
+            if change_ratio < settings.rewrite_min_change_ratio:
+                logger.info(
+                    "rewrite low-change retry triggered | ratio=%.3f | min=%.3f",
+                    change_ratio,
+                    settings.rewrite_min_change_ratio,
+                )
+                stronger_prompt = _build_user_prompt(
+                    text=text,
+                    hint=hint,
+                    preserve_terms=preserve_terms,
+                    strong_restructure=True,
+                )
+                stronger_payload = {
+                    "model": selected_model,
+                    "temperature": 0.62 if enable_reasoning else 0.48,
+                    "messages": [
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": json.dumps(stronger_prompt, ensure_ascii=False)},
+                    ],
+                }
+                retry_data = await self._request_completion(stronger_payload, headers, timeout, text_len=len(text))
+                if retry_data is not None:
+                    retry_choices = retry_data.get("choices") or []
+                    if retry_choices:
+                        retry_message = retry_choices[0].get("message", {}) or {}
+                        retry_content = _extract_message_text(retry_message).strip()
+                        if retry_content:
+                            result = retry_content
+
+        # Log any remaining blacklist terms for quality assurance
+        found_blacklist = [term for term in BLACKLIST_TERMS if term in result]
+        if found_blacklist:
+            logger.warning(
+                "rewritten text still contains blacklist terms | terms=%s",
+                found_blacklist,
+            )
+
+        return result
+
+    async def _request_completion(
+        self,
+        payload: dict,
+        headers: dict,
+        timeout: httpx.Timeout,
+        *,
+        text_len: int,
+    ) -> dict | None:
         max_attempts = max(1, settings.siliconflow_max_retries + 1)
         backoff = max(0.1, settings.siliconflow_retry_backoff_seconds)
-        data: dict = {}
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             for attempt in range(1, max_attempts + 1):
@@ -160,16 +210,15 @@ class SiliconFlowRewriter(Rewriter):
                         json=payload,
                     )
                     resp.raise_for_status()
-                    data = resp.json()
-                    break
+                    return resp.json()
                 except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
                     if attempt >= max_attempts:
                         logger.warning(
                             "siliconflow timeout after retries | attempts=%s | text_len=%s | fallback=original",
                             attempt,
-                            len(text),
+                            text_len,
                         )
-                        return text
+                        return None
                     sleep_s = backoff * (2 ** (attempt - 1))
                     logger.warning(
                         "siliconflow timeout | attempt=%s/%s | wait=%.2fs | error=%s",
@@ -197,24 +246,86 @@ class SiliconFlowRewriter(Rewriter):
                         "siliconflow non-retryable http error | status=%s | fallback=original",
                         status,
                     )
-                    return text
+                    return None
                 except Exception as exc:  # noqa: BLE001
-                    logger.exception("siliconflow unknown error | fallback=original | error=%s", exc)
-                    return text
+                    if settings.log_exception_stack:
+                        logger.exception("siliconflow unknown error | fallback=original | error=%s", exc)
+                    else:
+                        logger.error("siliconflow unknown error | fallback=original | error=%s", exc)
+                    return None
 
-        choices = data.get("choices") or []
-        if not choices:
-            return text
 
-        content = choices[0].get("message", {}).get("content", "")
-        result = content.strip() or text
+def _extract_message_text(message: dict) -> str:
+    """Extract final assistant text while intentionally ignoring reasoning fields."""
+    content = message.get("content", "")
 
-        # Log any remaining blacklist terms for quality assurance
-        found_blacklist = [term for term in BLACKLIST_TERMS if term in result]
-        if found_blacklist:
-            logger.warning(
-                "rewritten text still contains blacklist terms | terms=%s",
-                found_blacklist,
-            )
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts).strip()
 
-        return result
+    if isinstance(content, dict):
+        text = content.get("text")
+        return text.strip() if isinstance(text, str) else ""
+
+    return content.strip() if isinstance(content, str) else ""
+
+
+def _build_user_prompt(
+    *,
+    text: str,
+    hint: str,
+    preserve_terms: list[str],
+    strong_restructure: bool,
+) -> dict:
+    constraints = [
+        "【核心论意】保留核心论点100%，数据准确，引文标记（[1]、(Doe, 2024)、【文献01】）绝不改动。",
+        "【句法约束】句式可变但必须学术化；禁止口语化词（如'这事儿'、'踏实了'、'其实'）。",
+        "【学科术语变体】允许有限术语替换，禁止网络化表达或夸张比喻。",
+        "【工程细节与不确定性】优先写约束、报错、退让方案、性能-成本权衡，不得写'完美解决'。",
+        "【段落多样性】段落长度自然变化，逻辑清晰递进，不要机械对称。",
+        "【结构去模板】禁止'其一/其二/其三'、'首先/其次/最后'、'目的/方法/结论/对策'模板化分段。",
+        "【论证去对称】避免正反绝对对称结构，允许论证权重不均，突出关键矛盾与约束条件。",
+        "【代码保留】涉及JSON、SQL、正则、配置的内容：不删除、不模糊。",
+        "【词汇控制】优先技术事实陈述，少形容词，避免价值判断与煽动性措辞。",
+        "【黑名单剔除】完全删除AI高频词并替换：" + "、".join(
+            f"{k}→{v}" for k, v in BLACKLIST_TERMS.items()
+        ),
+        "【排比禁用】禁止排比对仗、宏大叙事、文学化修辞。改用技术文档风格：主谓宾清晰，证据驱动，边界明确。",
+        "【事实边界】不得新增具体实验数据、年份、机构统计、平台案例，除非原文已经提供。",
+        "【输出格式】仅返回改写文本，无前缀、无解释、无标记。如果你有内部思考，不得展示给用户。",
+    ]
+
+    if strong_restructure:
+        constraints.append(
+            "【强制重构】在不改变事实的前提下，必须重排句序和段内逻辑，避免沿用原文骨架。"
+        )
+
+    return {
+        "task": "academic_deep_restructure",
+        "topic": hint,
+        "preserve_terms": preserve_terms,
+        "input_text": text,
+        "constraints": constraints,
+    }
+
+
+def _normalized_change_ratio(original: str, rewritten: str) -> float:
+    if not original:
+        return 1.0
+    src = re.sub(r"\s+", "", original)
+    dst = re.sub(r"\s+", "", rewritten)
+    if not src and not dst:
+        return 0.0
+
+    same = sum(1 for a, b in zip(src, dst) if a == b)
+    max_len = max(len(src), len(dst), 1)
+    similarity = same / max_len
+    return max(0.0, min(1.0, 1.0 - similarity))

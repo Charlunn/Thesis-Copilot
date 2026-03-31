@@ -116,6 +116,20 @@ def build_compressed_context_payload() -> str:
     )
 
 
+def build_abstract_payload() -> str:
+    return json.dumps(
+        {
+            "title": "摘要",
+            "content": [
+                "本文围绕目标问题构建了完整研究路径，并在文献与场景约束下给出可执行方案。",
+                "结果表明该方案在可用性和一致性方面均达到预期，并为后续扩展提供基础。",
+            ],
+            "keywords": ["论文系统", "自动化", "工作流"],
+        },
+        ensure_ascii=False,
+    )
+
+
 def write_pdf(path: Path, content: bytes) -> Path:
     path.write_bytes(content)
     return path
@@ -198,9 +212,11 @@ def test_prompt_factory_and_generation_roundtrip(
         2,
         build_block_payload(2, "方法与结论"),
     )
+    generation_service.import_abstract(project_id, build_abstract_payload())
 
     state = workspace_manager.load_state(project_id)
     assert state.generation.current_block_index == 2
     assert state.generation.status.value == "completed"
     assert state.generation.blocks[0].compressed_context_json is not None
     assert state.generation.blocks[1].normalized_json is not None
+    assert state.generation.abstract_json is not None

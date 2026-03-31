@@ -123,6 +123,9 @@ class GenerationState(BaseModel):
     total_blocks: int = 0
     blocks: list[GeneratedBlockState] = Field(default_factory=list)
     latest_compressed_context: dict[str, Any] | None = None
+    abstract_raw_ai_text: str = ""
+    abstract_json: dict[str, Any] | None = None
+    abstract_status: GenericStatus = GenericStatus.PENDING
     status: GenericStatus = GenericStatus.PENDING
 
 

@@ -6,7 +6,7 @@ German and Japanese have fundamentally different grammar structures from Chinese
 Running text through these pivot languages forces automatic restructuring of
 complex sentences, typically reducing plagiarism detection rates by 30–50 %.
 
-The DeepL API is used for translation.  If the API key is absent the layer
+The Azure Translator API is used for translation.  If the API key is absent the layer
 is skipped gracefully and the original text is returned unchanged.
 """
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Literal
 
 import httpx
@@ -22,14 +23,14 @@ from docx_automation_service.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-TranslationLang = Literal["ZH", "DE", "JA", "EN-US"]
+TranslationLang = Literal["zh-Hans", "zh-Hant", "de", "ja", "en"]
 
 # Supported translation chains.
 # Key  : settings.translation_chain value
 # Value: ordered list of language codes (first = source, last = target)
 TRANSLATION_CHAINS: dict[str, list[TranslationLang]] = {
-    "zh-de-en-zh": ["ZH", "DE", "EN-US", "ZH"],
-    "zh-ja-en-zh": ["ZH", "JA", "EN-US", "ZH"],
+    "zh-de-en-zh": ["zh-Hans", "de", "en", "zh-Hans"],
+    "zh-ja-en-zh": ["zh-Hans", "ja", "en", "zh-Hans"],
 }
 _DEFAULT_CHAIN = "zh-de-en-zh"
 
@@ -45,20 +46,41 @@ class BackTranslationService:
     """
 
     def __init__(self) -> None:
-        self._api_key: str = settings.deepl_api_key
-        self._base_url: str = settings.deepl_base_url.rstrip("/")
+        self._api_key: str = settings.azure_translator_key
+        self._base_url: str = settings.azure_translator_endpoint.rstrip("/")
+        self._region: str = settings.azure_translator_region
         chain_key = settings.translation_chain
-        self._chain: list[TranslationLang] = TRANSLATION_CHAINS.get(
-            chain_key, TRANSLATION_CHAINS[_DEFAULT_CHAIN]
-        )
+        configured_chain = TRANSLATION_CHAINS.get(chain_key, TRANSLATION_CHAINS[_DEFAULT_CHAIN])
+        source_lang = settings.translation_source_lang
+        self._chain: list[TranslationLang] = configured_chain.copy()
+        self._chain[0] = source_lang
+        self._chain[-1] = source_lang
 
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
 
+    def config_status(self) -> tuple[bool, str]:
+        """Return (available, reason) for operational diagnostics."""
+        if not self._api_key:
+            return False, "azure_translator_key_missing"
+
+        if not self._base_url:
+            return False, "azure_translator_endpoint_missing"
+
+        if settings.azure_translator_require_region and not self._region:
+            return False, "azure_translator_region_missing"
+
+        return True, "ok"
+
     def is_available(self) -> bool:
-        """Return *True* when a DeepL API key has been configured."""
-        return bool(self._api_key)
+        """Return *True* when Azure Translator credentials are configured."""
+        available, _ = self.config_status()
+        return available
+
+    def translation_chain(self) -> list[str]:
+        """Return the effective translation chain for health/reporting."""
+        return list(self._chain)
 
     async def back_translate(self, text: str) -> str:
         """Apply the full translation chain and return restructured text.
@@ -67,7 +89,7 @@ class BackTranslationService:
         translation step fails.
         """
         if not self.is_available():
-            logger.debug("deepl api key not configured; back-translation skipped")
+            logger.debug("azure translator not configured; back-translation skipped")
             return text
 
         current = text
@@ -139,15 +161,20 @@ class BackTranslationService:
         source_lang: TranslationLang,
         target_lang: TranslationLang,
     ) -> str:
-        """Single DeepL translation call with graceful error handling."""
+        """Single Azure Translator call with graceful error handling."""
         headers = {
-            "Authorization": f"DeepL-Auth-Key {self._api_key}",
+            "Ocp-Apim-Subscription-Key": self._api_key,
             "Content-Type": "application/json",
+            "X-ClientTraceId": str(uuid.uuid4()),
         }
-        payload: dict = {
-            "text": [text],
-            "source_lang": source_lang,
-            "target_lang": target_lang,
+        if self._region:
+            headers["Ocp-Apim-Subscription-Region"] = self._region
+
+        payload: list[dict[str, str]] = [{"text": text}]
+        params = {
+            "api-version": "3.0",
+            "from": source_lang,
+            "to": target_lang,
         }
         timeout = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=30.0)
 
@@ -156,17 +183,20 @@ class BackTranslationService:
                 f"{self._base_url}/translate",
                 headers=headers,
                 json=payload,
+                params=params,
                 timeout=timeout,
             )
             resp.raise_for_status()
             data = resp.json()
-            translations = data.get("translations") or []
+            if not isinstance(data, list) or not data:
+                return text
+            translations = data[0].get("translations") or []
             if translations:
                 return translations[0].get("text", text)
             return text
         except httpx.HTTPStatusError as exc:
             logger.warning(
-                "deepl http error | source=%s | target=%s | status=%s",
+                "azure translator http error | source=%s | target=%s | status=%s",
                 source_lang,
                 target_lang,
                 exc.response.status_code,
@@ -174,7 +204,7 @@ class BackTranslationService:
             return text
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "deepl error | source=%s | target=%s | error=%s",
+                "azure translator error | source=%s | target=%s | error=%s",
                 source_lang,
                 target_lang,
                 exc,

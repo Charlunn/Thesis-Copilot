@@ -15,6 +15,7 @@ from qnu_copilot.api.config_models import (
     UpdateProviderRequest,
 )
 from qnu_copilot.api.models import (
+    AbstractImportRequest,
     BlockImportRequest,
     BlockImportResult,
     BatchImportResult,
@@ -87,6 +88,8 @@ def _get_prompt_type(prompt_name: str) -> str:
         return "block_generation"
     if "compress_prompt" in prompt_name:
         return "compression"
+    if prompt_name == "abstract_prompt":
+        return "abstract"
     return prompt_name
 
 
@@ -368,6 +371,24 @@ def create_router(
             instructions=instructions,
         )
 
+    @router.get(
+        "/projects/{project_id}/prompts/abstract",
+        response_model=PromptPreviewResponse,
+    )
+    def get_abstract_prompt(project_id: str) -> PromptPreviewResponse:
+        prompt_text, snapshot = prompt_factory.render_abstract_prompt(project_id)
+        state = workspace_manager.load_state(project_id)
+        model_hint, instructions = _load_prompt_metadata("abstract")
+        return PromptPreviewResponse(
+            project_id=project_id,
+            prompt_name="abstract_prompt",
+            prompt_text=prompt_text,
+            prompt_snapshot_path=str(snapshot.resolve()),
+            workflow_stage=state.workflow_stage,
+            model_hint=model_hint,
+            instructions=instructions,
+        )
+
     @router.post(
         "/projects/{project_id}/blocks/{block_index}/import",
         response_model=BlockImportResult,
@@ -405,6 +426,24 @@ def create_router(
         return BlockImportResult(
             project_id=project_id,
             block_index=block_index,
+            workflow_stage=state.workflow_stage,
+            parse_result=parsed,
+            state=state,
+        )
+
+    @router.post(
+        "/projects/{project_id}/abstract/import",
+        response_model=BlockImportResult,
+    )
+    def import_abstract(
+        project_id: str,
+        request: AbstractImportRequest,
+    ) -> BlockImportResult:
+        parsed = generation_service.import_abstract(project_id, request.raw_text)
+        state = workspace_manager.load_state(project_id)
+        return BlockImportResult(
+            project_id=project_id,
+            block_index=state.generation.total_blocks,
             workflow_stage=state.workflow_stage,
             parse_result=parsed,
             state=state,

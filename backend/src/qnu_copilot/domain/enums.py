@@ -8,6 +8,7 @@ class WorkflowStage(str, Enum):
     OUTLINE_EDITING = "outline_editing"
     CHUNK_PLANNING = "chunk_planning"
     BLOCK_GENERATION = "block_generation"
+    ABSTRACT_GENERATION = "abstract_generation"
     EXPORT = "export"
     DONE = "done"
 
@@ -40,6 +41,7 @@ class ContractType(str, Enum):
     CHUNK_PLAN = "chunk_plan"
     BLOCK_CONTENT = "block_content"
     COMPRESSED_CONTEXT = "compressed_context"
+    ABSTRACT = "abstract"
 
 
 class SkipReason(str, Enum):
