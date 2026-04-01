@@ -13,7 +13,12 @@ from docx_automation_service.integrations.back_translation import BackTranslatio
 from docx_automation_service.integrations.base import AIGCDetector, Rewriter, SimilarityDetector
 from docx_automation_service.integrations.text_analyzer import analyze_text, inject_burstiness
 from docx_automation_service.services.docx_mapper import DocxMapper
-from docx_automation_service.services.text_guard import sanitize_model_output, split_for_rewrite
+from docx_automation_service.services.text_guard import (
+    protect_text,
+    restore_text,
+    sanitize_model_output,
+    split_for_rewrite,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +239,11 @@ class PipelineService:
 
                 # Build (chunk, risk) pairs that need rewriting
                 rewrite_pairs = [
-                    (chunk, risks[i])
+                    (
+                        chunk,
+                        risks[i],
+                        _previous_chunk_context(chunks, i),
+                    )
                     for i, chunk in enumerate(chunks)
                     if (mode == "rewrite" and risks[i].flagged)
                     or (mode == "deep_rewrite" and (risks[i].flagged or settings.deep_rewrite_process_all_chunks))
@@ -255,11 +264,12 @@ class PipelineService:
                                 model_name=model_name,
                                 enable_reasoning=enable_reasoning,
                                 global_context=global_context,
+                                previous_context=previous_context,
                                 aigc_reduction_strategy=aigc_reduction_strategy,
                                 enable_structural_rebuild=enable_structural_rebuild,
                                 rewrite_failures=rewrite_failures,
                             )
-                            for chunk, _ in rewrite_pairs
+                            for chunk, _, previous_context in rewrite_pairs
                         ]
                     else:  # deep_rewrite
                         rewrite_coros = [
@@ -271,17 +281,18 @@ class PipelineService:
                                 model_name=model_name,
                                 enable_reasoning=enable_reasoning,
                                 global_context=global_context,
+                                previous_context=previous_context,
                                 aigc_reduction_strategy=aigc_reduction_strategy,
                                 enable_structural_rebuild=enable_structural_rebuild,
                                 rewrite_failures=rewrite_failures,
                             )
-                            for chunk, _ in rewrite_pairs
+                            for chunk, _, previous_context in rewrite_pairs
                         ]
 
                     results = await asyncio.gather(*rewrite_coros)
 
                     # Apply results and collect layer reports
-                    for (chunk, risk_entry), result in zip(rewrite_pairs, results):
+                    for (chunk, risk_entry, _), result in zip(rewrite_pairs, results):
                         if mode == "rewrite":
                             rewritten_text = result
                             self.mapper.apply_text(doc, chunk, rewritten_text)
@@ -385,6 +396,7 @@ class PipelineService:
         model_name: str | None,
         enable_reasoning: bool,
         global_context: str | None = None,
+        previous_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
         rewrite_failures: list[dict[str, str]],
@@ -438,6 +450,7 @@ class PipelineService:
                     model_name=model_name,
                     enable_reasoning=enable_reasoning,
                     global_context=global_context,
+                    previous_context=previous_context,
                     aigc_reduction_strategy=aigc_reduction_strategy,
                     enable_structural_rebuild=enable_structural_rebuild,
                 )
@@ -506,6 +519,7 @@ class PipelineService:
         model_name: str | None,
         enable_reasoning: bool,
         global_context: str | None,
+        previous_context: str | None,
         aigc_reduction_strategy: str | None,
         enable_structural_rebuild: bool,
         rewrite_failures: list[dict[str, str]],
@@ -522,6 +536,7 @@ class PipelineService:
                 model_name=model_name,
                 enable_reasoning=enable_reasoning,
                 global_context=global_context,
+                previous_context=previous_context,
                 aigc_reduction_strategy=aigc_reduction_strategy,
                 enable_structural_rebuild=enable_structural_rebuild,
             )
@@ -543,6 +558,7 @@ class PipelineService:
         model_name: str | None,
         enable_reasoning: bool,
         global_context: str | None,
+        previous_context: str | None,
         aigc_reduction_strategy: str | None,
         enable_structural_rebuild: bool,
         rewrite_failures: list[dict[str, str]],
@@ -558,6 +574,7 @@ class PipelineService:
             model_name=model_name,
             enable_reasoning=enable_reasoning,
             global_context=global_context,
+            previous_context=previous_context,
             aigc_reduction_strategy=aigc_reduction_strategy,
             enable_structural_rebuild=enable_structural_rebuild,
             rewrite_failures=rewrite_failures,
@@ -647,6 +664,7 @@ class PipelineService:
         model_name: str | None,
         enable_reasoning: bool,
         global_context: str | None = None,
+        previous_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
     ) -> str:
@@ -656,23 +674,32 @@ class PipelineService:
             max_chars=settings.rewrite_chunk_max_chars,
         )
         rewritten_parts: list[str] = []
-        for part in chunks:
-            rewritten = await self._rewrite_once(
-                part,
-                topic_hint=topic_hint,
-                preserve_terms=preserve_terms,
-                model_name=model_name,
-                enable_reasoning=enable_reasoning,
-                global_context=global_context,
-                aigc_reduction_strategy=aigc_reduction_strategy,
-                enable_structural_rebuild=enable_structural_rebuild,
-            )
-            if settings.sanitize_model_output:
-                rewritten = sanitize_model_output(
-                    rewritten,
-                    original_text=part,
-                    source_is_heading=source_is_heading,
+        for idx, part in enumerate(chunks):
+            current_previous_context = previous_context if idx == 0 else chunks[idx - 1][-100:]
+            guarded = protect_text(part)
+
+            if guarded.skip_rewrite:
+                rewritten = part
+            else:
+                rewritten = await self._rewrite_once(
+                    guarded.guarded_text,
+                    topic_hint=topic_hint,
+                    preserve_terms=preserve_terms,
+                    model_name=model_name,
+                    enable_reasoning=enable_reasoning,
+                    global_context=global_context,
+                    previous_context=current_previous_context,
+                    aigc_reduction_strategy=aigc_reduction_strategy,
+                    enable_structural_rebuild=enable_structural_rebuild,
                 )
+                if settings.sanitize_model_output:
+                    rewritten = sanitize_model_output(
+                        rewritten,
+                        original_text=guarded.guarded_text,
+                        source_is_heading=source_is_heading,
+                    )
+                rewritten = restore_text(rewritten, guarded.token_map)
+
             rewritten_parts.append(rewritten)
 
         return "".join(rewritten_parts).strip() or text
@@ -686,6 +713,7 @@ class PipelineService:
         model_name: str | None,
         enable_reasoning: bool,
         global_context: str | None = None,
+        previous_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
     ) -> str:
@@ -697,6 +725,7 @@ class PipelineService:
                 model_name=model_name,
                 enable_reasoning=enable_reasoning,
                 global_context=global_context,
+                previous_context=previous_context,
                 aigc_reduction_strategy=aigc_reduction_strategy,
                 enable_structural_rebuild=enable_structural_rebuild,
             )
@@ -788,6 +817,15 @@ class PipelineService:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _previous_chunk_context(chunks, current_index: int) -> str | None:
+    if current_index <= 0 or current_index >= len(chunks):
+        return None
+    previous_text = (chunks[current_index - 1].text or "").strip()
+    if not previous_text:
+        return None
+    return previous_text[-100:]
+
 
 def _merge_layer_report(existing: list[LayerReport], new: LayerReport) -> None:
     """Accumulate chunk-level layer stats into a run-level list."""

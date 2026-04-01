@@ -20,6 +20,7 @@ class Rewriter(Protocol):
         model_name: str | None = None,
         enable_reasoning: bool = True,
         global_context: str | None = None,
+        previous_context: str | None = None,
         aigc_reduction_strategy: str | None = None,
         enable_structural_rebuild: bool = False,
     ) -> str:
